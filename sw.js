@@ -1,5 +1,5 @@
 // Gruszka – zapamiętuje aplikację w telefonie, żeby otwierała się także bez internetu.
-const CACHE = 'gruszka-v1';
+const CACHE = 'gruszka-v2';
 
 self.addEventListener('install', e => {
   self.skipWaiting();
