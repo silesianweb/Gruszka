@@ -125,7 +125,7 @@ const fs = initializeFirestore(fb, { localCache: persistentLocalCache() });
 // ---------- pomocnicze ----------
 const $ = id => document.getElementById(id);
 const app = $('app');
-const APP_VER = '23.10.2026 · 16:30';
+const APP_VER = '23.10.2026 · 17:00';
 
 // ---------- LOGO: drzewo gruszy ----------
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -515,16 +515,19 @@ function showLogin(){
     <img src="${iconUrl}" style="width:110px;display:block;margin:10px auto;border-radius:24px">
     <h2 style="margin-top:0;text-align:center">Witaj</h2>
     <label>E-mail</label><input id="em" type="email" autocomplete="username">
-    <label>Hasło</label><input id="pw" type="password" autocomplete="current-password">
+    <label>Hasło (min. 6 znaków)</label><input id="pw" type="password" autocomplete="current-password">
     <button class="btn" id="li">Zaloguj się</button>
+    <button class="btn sec" id="rg">Załóż nowe konto</button>
     <p style="text-align:center"><a href="#" id="rs">Nie pamiętam hasła</a></p>
     <p id="er" style="color:#c62828"></p></div>`;
   const er = m => $('er').textContent = m;
   const msg = e => ({'auth/invalid-email':'Nieprawidłowy e-mail','auth/invalid-credential':'Zły e-mail lub hasło',
     'auth/email-already-in-use':'Konto z tym e-mailem już istnieje','auth/weak-password':'Hasło musi mieć min. 6 znaków',
-    'auth/missing-password':'Podaj hasło','auth/network-request-failed':'Brak internetu','auth/too-many-requests':'Za dużo prób – spróbuj za chwilę'}[e.code] || e.message);
+    'auth/missing-password':'Podaj hasło','auth/network-request-failed':'Brak internetu','auth/too-many-requests':'Za dużo prób – spróbuj za chwilę',
+    'auth/admin-restricted-operation':'Zakładanie nowych kont jest wyłączone','auth/operation-not-allowed':'Logowanie e-mailem jest wyłączone w Firebase'}[e.code] || e.message);
   const em = () => $('em').value.trim(), pw = () => $('pw').value;
   $('li').onclick = () => signInWithEmailAndPassword(auth, em(), pw()).catch(e => er(msg(e)));
+  $('rg').onclick = () => createUserWithEmailAndPassword(auth, em(), pw()).catch(e => er(msg(e)));
   $('rs').onclick = e => { e.preventDefault(); if(!em()) return er('Wpisz najpierw e-mail');
     sendPasswordResetEmail(auth, em()).then(() => er('Wysłano link do zmiany hasła na e-mail')).catch(e => er(msg(e))); };
 }
