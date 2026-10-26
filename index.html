@@ -125,7 +125,7 @@ const fs = initializeFirestore(fb, { localCache: persistentLocalCache() });
 // ---------- pomocnicze ----------
 const $ = id => document.getElementById(id);
 const app = $('app');
-const APP_VER = '23.10.2026 · 17:00';
+const APP_VER = '23.10.2026 · 20:20';
 
 // ---------- LOGO: drzewo gruszy ----------
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -580,10 +580,7 @@ function reminders(){
 function priceHtml(c){
   const h = c.priceHist || [];
   const dlug = (c.visits||[]).filter(v => v.done && !v.paid).reduce((s, v) => s + (+v.amount || 0), 0);
-  return `<p>💰 Stawka: <b>${c.price != null ? c.price + ' zł' : 'nie ustalono'}</b></p>
-  ${h.length > 1 ? `<div class="muted"><b>Historia cen:</b><br>${h.map((x, i) => { const r = i ? x.price - h[i-1].price : 0;
-    return `${plDate(x.date)}: ${x.price} zł${i ? ` (${r >= 0 ? '+' : ''}${r} zł)` : ''}`; }).join('<br>')}</div>` : ''}
-  ${dlug ? `<p style="color:#c62828"><b>Do zapłaty: ${dlug} zł</b></p>` : ''}`;
+  return dlug ? `<p style="color:#c62828"><b>Do zapłaty: ${dlug} zł</b></p>` : '';
 }
 
 // ---------- KALENDARZ ----------
@@ -1073,10 +1070,9 @@ function showClient(id){
   app.innerHTML = `<div class="card"><b>${esc(c.name)}</b><br>
     ${c.address ? `📍 <a href="${navUrl(c.address)}" target="_blank" rel="noopener">${esc(c.address)}</a><br>` : ''}
     ${c.phone ? `📞 <a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : ''}
-    ${c.every ? `<p>🔁 Wizyty: <b>${everyTxt(c.every).toLowerCase()}</b></p>` : ''}
     ${priceHtml(c)}
     ${c.notes ? `<p class="muted">${esc(c.notes)}</p>` : ''}
-    <button class="btn sec" id="ed">✏️ Edytuj dane i cenę</button></div>
+    <button class="btn sec" id="ed">✏️ Edytuj dane</button></div>
     ${(() => { const st = cStats(c); return st.n ? `<div style="display:flex;gap:6px;margin-bottom:8px">
       <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Wykonane</span><b style="font-size:18px">${st.n}</b></div>
       <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Czas pracy</span><b style="font-size:18px">${fmtH(st.h)}</b></div>
@@ -1142,18 +1138,12 @@ function editClient(id){
     <div style="display:flex;gap:8px">
       <div style="flex:3"><label>Ulica i numer domu</label><input id="a" value="${esc(c.street)}" placeholder="np. Lipowa 5"></div>
       <div style="flex:2"><label>Miejscowość</label><input id="ct" value="${esc(c.city)}"></div></div>
-    <label>Stawka za wizytę (zł)</label><input id="pr" type="text" inputmode="decimal" autocomplete="off" value="${c.price ?? ''}">
-    <label>🔁 Powtarzaj wizyty</label><select id="ev">${EVERY.map(([k, t]) => `<option value="${k}" ${(c.every || '') === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
-    <p class="muted" style="margin:-4px 0 10px;font-size:13px">Po odhaczeniu wizyty kolejny termin doda się sam.</p>
     <label>Notatki (np. rodzaj żywopłotu, kod do bramy)</label><textarea id="no" rows="3">${esc(c.notes)}</textarea>
     <button class="btn" id="s">Zapisz</button>${isNew ? '' : '<button class="btn del" id="d">Usuń klienta</button>'}</div>`;
   $('s').onclick = () => {
     c.name = $('n').value.trim(); if (!c.name) return alert('Podaj imię i nazwisko');
     c.phone = $('p').value.trim(); c.street = $('a').value.trim(); c.city = $('ct').value.trim();
-    c.address = [c.street, c.city].filter(Boolean).join(', '); c.notes = $('no').value.trim(); c.every = $('ev').value;
-    const np = parseH($('pr').value);
-    if (np !== null && np !== c.price) (c.priceHist = c.priceHist || []).push({date: ymd(new Date()), price: np});
-    c.price = np;
+    c.address = [c.street, c.city].filter(Boolean).join(', '); c.notes = $('no').value.trim(); c.every = '';
     saveClient(c); showClient(c.id);
   };
   if (!isNew) $('d').onclick = () => { if (confirm('Usunąć klienta, wszystkie wizyty i zdjęcia?')) { removeClient(c); showClients(); } };
