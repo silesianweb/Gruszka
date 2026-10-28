@@ -81,7 +81,7 @@ nav .ic{font-size:19px;line-height:1.1}
 .tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--g2);color:var(--g)}
 .tag.red{background:#ffebee;color:#c62828}.tag.orange{background:#fff3e0;color:#e65100}
 .sw{position:relative;margin-bottom:10px;border-radius:14px;overflow:hidden}
-.sw .swc{margin:0;position:relative;transition:transform .2s ease;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.sw .swc{margin:0;position:relative;transition:transform .2s ease;touch-action:pan-y;will-change:transform;user-select:none;-webkit-user-select:none}
 .swdel{position:absolute;right:0;top:0;bottom:0;width:96px;background:#c62828;color:#fff;border:none;font-size:15px;font-weight:700;font-family:inherit}
 .qrow{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:8px}
 .qk{width:48px;height:48px;border-radius:50%;border:2px solid;background:#fff;font-size:24px;font-weight:700;line-height:1;padding:0;font-family:inherit;display:inline-flex;align-items:center;justify-content:center}
@@ -125,7 +125,49 @@ const fs = initializeFirestore(fb, { localCache: persistentLocalCache() });
 // ---------- pomocnicze ----------
 const $ = id => document.getElementById(id);
 const app = $('app');
-const APP_VER = '23.10.2026 · 20:20';
+
+// ---------- WYDAJNOŚĆ: aktualizacja tylko zmienionych elementów (zamiast przebudowy całego ekranu) ----------
+const nativeHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+function syncAttrs(a, b){
+  const keepImg = a.tagName === 'IMG' && a.dataset.pid && a.dataset.pid === b.getAttribute('data-pid');
+  for (const at of [...a.attributes]) if (!b.hasAttribute(at.name) && !(keepImg && (at.name === 'src' || at.name === 'data-loaded'))) a.removeAttribute(at.name);
+  for (const at of b.attributes) if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+}
+function morphKids(a, b, sameView){
+  const nb = [...b.childNodes];
+  nb.forEach((n, i) => {
+    const o = a.childNodes[i];
+    if (!o) { a.appendChild(n); return; }
+    if (o.nodeType !== n.nodeType || o.nodeName !== n.nodeName || (o.id || '') !== (n.id || '')) { a.replaceChild(n, o); return; }
+    if (o.nodeType !== 1) { if (o.nodeValue !== n.nodeValue) o.nodeValue = n.nodeValue; return; }
+    syncAttrs(o, n);
+    const tag = o.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      if (!sameView) { if (tag === 'INPUT' && (o.type === 'checkbox' || o.type === 'radio')) o.checked = n.hasAttribute('checked');
+        else if (tag === 'TEXTAREA') o.value = n.textContent; else if (tag === 'INPUT') o.value = n.getAttribute('value') || ''; }
+      if (tag === 'SELECT') { const keep = o.value; morphKids(o, n, sameView); o.value = sameView ? keep : (n.querySelector('option[selected]') || n.querySelector('option') || {}).value || ''; }
+      return;
+    }
+    if (o.hasAttribute('data-own')) return;           // zawartość listy rysuje osobno funkcja draw()
+    morphKids(o, n, sameView);
+  });
+  while (a.childNodes.length > nb.length) a.removeChild(a.lastChild);
+}
+let lastViewKey = '';
+function setHTML(el, html, sameView){
+  const t = document.createElement('template'); nativeHTML.set.call(t, html);
+  morphKids(el, t.content, sameView);
+}
+Object.defineProperty(app, 'innerHTML', {
+  get(){ return nativeHTML.get.call(this); },
+  set(html){
+    const key = (document.getElementById('title') || {}).textContent + '|' + (String(html).match(/ id="[^"]+"/g) || []).join('');
+    const same = key === lastViewKey; lastViewKey = key;
+    if (!same) { nativeHTML.set.call(this, html); return; }
+    setHTML(this, html, true);
+  }
+});
+const APP_VER = '28.10.2026 · 11:45';
 
 // ---------- LOGO: drzewo gruszy ----------
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -178,7 +220,7 @@ const byTime = (a, b) => (a.v.time || '99').localeCompare(b.v.time || '99');
 function setVisit(cid, vid, act){
   const c = findClient(cid); if (!c) return;
   const v = (c.visits||[]).find(x => x.id === vid); if (!v) return;
-  if (act === 'done') { v.done = true; v.cancelled = false; if (v.amount == null) v.amount = c.price ?? null; v.paid = true; v.paidAt = ymd(new Date()); }
+  if (act === 'done') { v.done = true; v.cancelled = false; if (v.amount == null) v.amount = c.price ?? null; v.paid = true; v.paidAt = v.date; }
   if (act === 'cancel') { v.cancelled = true; v.done = false; }
   if (act === 'restore') v.cancelled = false;
   saveClient(c); if (view) view();
@@ -418,7 +460,7 @@ function doneDialog(cid, vid){
     v.desc = q('mdD').value.trim(); v.done = true; v.cancelled = false;
     const k = q('mdK').value.trim().replace(',', '.');
     if (k === '' || isNaN(+k)) { alert('Wpisz kwotę (może być 0).'); return q('mdK').focus(); }
-    v.amount = +k; v.paid = true; v.paidAt = ymd(new Date());
+    v.amount = +k; v.paid = true; v.paidAt = v.date;
     v.hours = parseH(q('mdH').value); v.helpers = keepPaidOut(readHelpers(w, v.hours), v.helpers);
     if (v.desc) logAdd(c, `${shortDate(v.date)}: ${v.desc}${v.hours ? ' (' + fmtH(v.hours) + ')' : ''}`, 'done');
     addNext(c, v, plan);
@@ -428,7 +470,7 @@ function doneDialog(cid, vid){
   };
 }
 
-let user = null, clients = [], unsub = null, view = null;
+let user = null, clients = [], unsub = null, view = null, lastSnapSig = '', snapT = null;
 let settings = {helpers: []}, unsubS = null;
 const settingsDoc = () => doc(fs, 'users', user.uid, 'settings', 'main');
 const saveSettings = () => setDoc(settingsDoc(), settings).catch(e => alert('Błąd zapisu: ' + e.message));
@@ -460,18 +502,27 @@ const photoDoc = id => doc(fs, 'users', user.uid, 'photos', id);
 async function upload(rec){
   try { await setDoc(photoDoc(rec.id), { data: rec.data }); await idbPut({ ...rec, up: true }); } catch(e) {}
 }
+const photoMem = new Map(), photoWait = new Map();
+const memPut = (id, d) => { photoMem.delete(id); photoMem.set(id, d); if (photoMem.size > 150) photoMem.delete(photoMem.keys().next().value); };
 async function putPhoto(id, data){
+  memPut(id, data);
   await pdbReady; const rec = { id, data, up: false };
   await idbPut(rec); upload(rec);
 }
 async function getPhoto(id){
-  await pdbReady;
-  const r = await idbGet(id); if (r) return r.data;
-  try { const s = await getDoc(photoDoc(id));
-    if (s.exists()) { const data = s.data().data; await idbPut({ id, data, up: true }); return data; } } catch(e) {}
-  return null;
+  if (photoMem.has(id)) return photoMem.get(id);
+  if (photoWait.has(id)) return photoWait.get(id);
+  const job = (async () => {
+    await pdbReady;
+    const r = await idbGet(id); if (r) return r.data;
+    try { const sn = await getDoc(photoDoc(id));
+      if (sn.exists()) { const data = sn.data().data; await idbPut({ id, data, up: true }); return data; } } catch(e) {}
+    return null;
+  })().then(d => { photoWait.delete(id); if (d) memPut(id, d); return d; });
+  photoWait.set(id, job); return job;
 }
 async function delPhoto(id){
+  photoMem.delete(id);
   await pdbReady;
   await new Promise(r => { ps('readwrite').delete(id).onsuccess = r; });
   deleteDoc(photoDoc(id)).catch(() => {});
@@ -480,7 +531,16 @@ async function syncPhotos(){
   await pdbReady;
   for (const r of await idbAll()) if (!r.up) await upload(r);
 }
-function loadImgs(){app.querySelectorAll('img[data-pid]').forEach(async im=>{const d=await getPhoto(im.dataset.pid);if(d)im.src=d})}
+const showImg = async im => { const id = im.dataset.pid, d = await getPhoto(id); if (d && im.dataset.pid === id) { im.src = d; im.dataset.loaded = id; } };
+const imgIO = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) { imgIO.unobserve(e.target); showImg(e.target); } }), {rootMargin: '300px 0px'}) : null;
+function loadImgs(root = app){
+  root.querySelectorAll('img[data-pid]').forEach(im => {
+    if (im.dataset.loaded === im.dataset.pid) return;
+    im.loading = 'lazy'; im.decoding = 'async';
+    if (photoMem.has(im.dataset.pid) || !imgIO) showImg(im); else imgIO.observe(im);
+  });
+}
 function shrink(file){return new Promise(r=>{const img=new Image();img.onload=()=>{
   const max=1000,s=Math.min(1,max/Math.max(img.width,img.height));
   const c=document.createElement('canvas');c.width=img.width*s;c.height=img.height*s;
@@ -504,8 +564,11 @@ onAuthStateChanged(auth, u => {
     if (!first && view) view();
   });
   unsub = onSnapshot(collection(fs, 'users', u.uid, 'clients'), snap => {
-    clients = snap.docs.map(d => d.data());
-    if (first) { first = false; showClients(); } else if (view) view();
+    const next = snap.docs.map(d => d.data()), sig = JSON.stringify(next);
+    if (!first && sig === lastSnapSig) return;            // nic się nie zmieniło – nie rysuj ponownie
+    lastSnapSig = sig; clients = next;
+    if (first) { first = false; showClients(); return; }
+    clearTimeout(snapT); snapT = setTimeout(() => { if (view) view(); }, 180);   // zbierz szybkie zmiany w jedno odświeżenie
   }, e => alert('Błąd bazy: ' + e.message));
 });
 
@@ -793,7 +856,7 @@ function markPaid(cid, vid, paid){
     const k = a.trim().replace(',', '.'); if (k === '' || isNaN(+k)) return alert('Wpisz kwotę (może być 0).');
     v.amount = +k;
   }
-  v.paid = paid; v.paidAt = paid ? ymd(new Date()) : null;
+  v.paid = paid; v.paidAt = paid ? v.date : null;
   saveClient(c); if (view) view();
 }
 function bindPay(){
@@ -803,27 +866,39 @@ function bindPay(){
     markPaid(b.dataset.c, b.dataset.vid, b.dataset.pay === '1');
   });
 }
-let payMonth = new Date();
+let payMonth = new Date(), payMode = 'month';
+function payRange(){
+  const d = payMonth, y = d.getFullYear(), m = d.getMonth();
+  if (payMode === 'year') return {from: y + '-01-01', to: y + '-12-31', label: String(y), word: 'w tym roku'};
+  if (payMode === 'week') { const from = addDays(ymd(d), -((d.getDay() + 6) % 7)), to = addDays(from, 6);
+    return {from, to, label: shortDate(from).replace(/ \d{4}$/, '') + ' – ' + shortDate(to), word: 'w tym tygodniu'}; }
+  return {from: ymd(new Date(y, m, 1)), to: ymd(new Date(y, m + 1, 0)), label: d.toLocaleDateString('pl-PL', {month: 'long', year: 'numeric'}), word: 'w tym miesiącu'};
+}
 function showPay(){
   view = showPay; tab('pay'); head('Płatności');
-  const y = payMonth.getFullYear(), m = payMonth.getMonth(), key = ymd(new Date(y, m, 1)).slice(0, 7);
+  const y = payMonth.getFullYear(), m = payMonth.getMonth(), R = payRange(), inR = d => !!d && d >= R.from && d <= R.to;
   const due = dueList().sort((a, b) => a.v.date.localeCompare(b.v.date));
   const paid = [], done = [], cancelled = [];
   clients.forEach(c => (c.visits||[]).forEach(v => {
-    if (v.done && v.paid && (v.paidAt || v.date).startsWith(key)) paid.push({c, v});
-    if (v.done && v.date.startsWith(key)) done.push({c, v});
-    if (v.cancelled && v.date.startsWith(key)) cancelled.push({c, v});
+    if (v.done && v.paid && inR(v.paidAt || v.date)) paid.push({c, v});
+    if (v.done && inR(v.date)) done.push({c, v});
+    if (v.cancelled && inR(v.date)) cancelled.push({c, v});
   }));
   paid.sort((a, b) => (b.v.paidAt || b.v.date).localeCompare(a.v.paidAt || a.v.date));
   const total = paid.reduce((s, x) => s + (+x.v.amount || 0), 0);
-  const outM = clients.reduce((s, c) => s + (c.visits || []).reduce((t, v) => t + paidOutBy(v, d => d.startsWith(key)), 0), 0);
+  const outM = clients.reduce((s, c) => s + (c.visits || []).reduce((t, v) => t + paidOutBy(v, inR), 0), 0);
   const owed = {}; clients.forEach(c => (c.visits || []).forEach(v => (v.helpers || []).forEach(h => {
     if (h.paidOut || !(+h.pay)) return;
     const o = owed[h.id] = owed[h.id] || {id: h.id, name: h.name, sum: 0, items: []};
     o.sum += +h.pay; o.items.push({c, v, h}); })));
   const owedL = Object.values(owed).sort((a, b) => b.sum - a.sum);
   const outLog = []; clients.forEach(c => (c.visits || []).forEach(v => (v.helpers || []).forEach(h => {
-    if (h.paidOut && +h.pay && (h.paidOutAt || v.date).startsWith(key)) outLog.push({c, v, h}); })));
+    if (h.paidOut && +h.pay && inR(h.paidOutAt || v.date)) outLog.push({c, v, h}); })));
+  const months = payMode !== 'year' ? [] : Array.from({length: 12}, (_, i) => {
+    const k = y + '-' + String(i + 1).padStart(2, '0'), f = d => !!d && d.startsWith(k);
+    const inc = clients.reduce((s, c) => s + (c.visits || []).filter(v => v.done && v.paid && f(v.paidAt || v.date)).reduce((t, v) => t + (+v.amount || 0), 0), 0);
+    const out = clients.reduce((s, c) => s + (c.visits || []).reduce((t, v) => t + paidOutBy(v, f), 0), 0);
+    return {i, inc, out, name: new Date(y, i, 1).toLocaleDateString('pl-PL', {month: 'long'})}; });
   const noAmount = paid.filter(x => x.v.amount == null).length;
   const hrs = done.reduce((s, x) => s + hoursOf(x.v), 0);
   const per = {}; paid.forEach(({c, v}) => { per[c.id] = per[c.id] || {c, n: 0, s: 0}; per[c.id].n++; per[c.id].s += +v.amount || 0; });
@@ -841,9 +916,12 @@ function showPay(){
         <div class="row"><b style="font-size:17px">${esc(o.name)}</b><b style="font-size:18px;color:#e65100">${zl(o.sum)}</b></div>
         <div class="muted" style="font-size:13px;margin:4px 0">${o.items.map(x => `${shortDate(x.v.date)} – ${esc(x.c.name)}: ${zl(x.h.pay)}`).join('<br>')}</div>
         <button class="btn" style="margin:6px 0 0" data-payout="${o.id}">💸 Zapłać ${zl(o.sum)}</button></div>`).join('')}</div>` : ''}
+    <div class="seg"><button data-pmode="week" class="${payMode === 'week' ? 'on' : ''}">Tydzień</button>
+      <button data-pmode="month" class="${payMode === 'month' ? 'on' : ''}">Miesiąc</button>
+      <button data-pmode="year" class="${payMode === 'year' ? 'on' : ''}">Rok</button></div>
     <div class="card"><div class="row">
       <button class="btn sec" style="width:auto;margin:0" id="pm">‹</button>
-      <b>${payMonth.toLocaleDateString('pl-PL', {month: 'long', year: 'numeric'})}</b>
+      <b>${R.label}</b>
       <button class="btn sec" style="width:auto;margin:0" id="nm">›</button></div></div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <div class="stat"><span class="muted">Wpłynęło</span><b>${zl(total)}</b></div>
@@ -854,7 +932,9 @@ function showPay(){
       <div class="stat"><span class="muted">Przepracowane</span><b>${hrs ? fmtH(hrs) : '–'}</b></div>
       <div class="stat"><span class="muted">Odwołane</span><b>${cancelled.length}</b></div></div>
     ${noAmount ? `<p style="color:#c62828;font-size:14px">⚠️ ${noAmount} ${pl(noAmount, 'płatność nie ma', 'płatności nie mają', 'płatności nie ma')} wpisanej kwoty, więc nie liczą się do sumy. Stuknij ją i wpisz kwotę.</p>` : ''}
-    ${top.length ? `<h3>Klienci w tym miesiącu</h3>${top.map(x => `<div class="card row" data-id="${x.c.id}">
+    ${months.length ? `<h3>Miesiąc po miesiącu</h3><div class="card" style="padding:4px 12px">${months.map(x => `<div class="row" data-pm-month="${x.i}" style="padding:8px 0;border-bottom:1px solid var(--g2);${x.inc || x.out ? '' : 'opacity:.45'}">
+      <span style="text-transform:capitalize">${x.name}</span><span style="font-size:14px">${zl(x.inc)}${x.out ? ` <span style="color:#e65100">− ${zl(x.out)}</span>` : ''} → <b style="color:var(--g)">${zl(x.inc - x.out)}</b></span></div>`).join('')}</div>` : ''}
+    ${top.length ? `<h3>Klienci ${R.word}</h3>${top.map(x => `<div class="card row" data-id="${x.c.id}">
       <span><b>${esc(x.c.name)}</b><br><span class="muted">${x.n} ${pl(x.n, 'płatność', 'płatności', 'płatności')}</span></span><b>${x.s} zł</b></div>`).join('')}` : ''}
     ${outLog.length ? `<h3>Wypłaty pomocnikom</h3>${outLog.sort((a, b) => (b.h.paidOutAt || '').localeCompare(a.h.paidOutAt || '')).map(x => `<div class="card row">
       <span><b>${esc(x.h.name)}</b><br><span class="muted" style="font-size:13px">${shortDate(x.h.paidOutAt || x.v.date)} · za: ${esc(x.c.name)}, ${shortDate(x.v.date)}</span></span>
@@ -865,7 +945,7 @@ function showPay(){
       ${helperPay(v) ? `<div style="font-size:14px;color:#e65100">👷 ${helpersTxt(v)}</div>` : ''}
       <div class="muted" style="font-size:14px">Zapłacono: ${shortDate(v.paidAt || v.date)}${v.paidAt && v.paidAt !== v.date ? ' · praca: ' + shortDate(v.date) : ''}</div>
       ${v.desc ? `<div style="font-size:14px">${esc(v.desc)}</div>` : ''}</div>`).join('')
-      || '<p class="muted">Brak płatności w tym miesiącu.</p>'}`;
+      || `<p class="muted">Brak płatności ${R.word}.</p>`}`;
   app.querySelectorAll('[data-payout]').forEach(b => b.onclick = () => {
     const o = owed[b.dataset.payout]; if (!o) return;
     const today = ymd(new Date()), prevs = [];
@@ -877,8 +957,13 @@ function showPay(){
     showPay();
     toastUndo(`💸 Zapłacono ${esc(o.name)}: ${zl(o.sum)}`, () => prevs.forEach(p => saveClient(p)));
   });
-  $('pm').onclick = () => { payMonth = new Date(y, m - 1, 1); showPay(); };
-  $('nm').onclick = () => { payMonth = new Date(y, m + 1, 1); showPay(); };
+  const shift = k => { if (payMode === 'year') payMonth = new Date(y + k, m, 1);
+    else if (payMode === 'week') { const d = new Date(payMonth); d.setDate(d.getDate() + 7 * k); payMonth = d; }
+    else payMonth = new Date(y, m + k, 1); showPay(); };
+  $('pm').onclick = () => shift(-1);
+  $('nm').onclick = () => shift(1);
+  app.querySelectorAll('[data-pmode]').forEach(b => b.onclick = () => { payMode = b.dataset.pmode; if (payMode === 'week') payMonth = new Date(); showPay(); });
+  app.querySelectorAll('[data-pm-month]').forEach(r => r.onclick = () => { payMode = 'month'; payMonth = new Date(y, +r.dataset.pmMonth, 1); showPay(); });
   app.querySelectorAll('[data-id]').forEach(e => e.onclick = () => showClient(e.dataset.id));
   app.querySelectorAll('[data-v]').forEach(e => e.onclick = () => editVisit(e.dataset.c, e.dataset.v, showPay));
   bindPay();
@@ -932,7 +1017,7 @@ function showTeam(){
 }
 
 // ---------- LISTA KLIENTÓW ----------
-let cliSort = 'az';
+let cliSort = 'az', cliLimit = 30, histLimit = 30;
 const shortDate = s => new Date(s+'T12:00').toLocaleDateString('pl-PL',{day:'numeric',month:'short',year:'numeric'});
 const cStats = c => { const d = (c.visits||[]).filter(v => v.done);
   return {n: d.length, h: d.reduce((s, v) => s + hoursOf(v), 0), z: d.filter(v => v.paid).reduce((s, v) => s + (+v.amount || 0), 0),
@@ -945,7 +1030,7 @@ function showClients(){
   app.innerHTML = `<input id="q" placeholder="🔍 Szukaj: nazwisko, adres, telefon">
     <select id="so"><option value="az">Sortuj: alfabetycznie</option>
       <option value="old">Sortuj: najdawniej robione</option><option value="new">Sortuj: ostatnio robione</option></select>
-    <button class="btn" id="add">+ Nowy klient</button><br><div id="list"></div>
+    <button class="btn" id="add">+ Nowy klient</button><br><div id="list" data-own></div>
     <div class="card" style="margin-top:20px"><label>💬 Podpis w SMS do klientów</label>
       <input id="sig" placeholder="np. Pozdrawiam, Marek – usługi ogrodnicze" value="${esc(getSig())}">
       <p class="muted" style="margin:0;font-size:13px">Dopisuje się na końcu przypomnienia wysyłanego przyciskiem 💬 SMS.</p>
@@ -960,7 +1045,8 @@ function showClients(){
       .map(c => ({c, l: lastDone(c), n: pending(c)}));
     if (cliSort === 'az') cs.sort((a, b) => a.c.name.localeCompare(b.c.name, 'pl'));
     else { const k = x => x.l ? x.l.date : ''; cs.sort((a, b) => cliSort === 'old' ? k(a).localeCompare(k(b)) : k(b).localeCompare(k(a))); }
-    $('list').innerHTML = cs.map(({c, l, n}) => `<div class="card" data-id="${c.id}"><b>${esc(c.name)}</b>
+    const more = cs.length - cliLimit;
+    setHTML($('list'), cs.slice(0, cliLimit).map(({c, l, n}) => `<div class="card" data-id="${c.id}"><b>${esc(c.name)}</b>
       <div class="muted">${[esc(c.address), esc(c.phone)].filter(Boolean).join(' · ')}</div>
       ${(() => { const st = cStats(c); if (!st.n) return '<div style="margin-top:6px;font-size:14px" class="muted">✅ Jeszcze nic nie wykonano</div>';
         return `<div style="margin-top:8px;font-size:14px;background:#f6faf6;border-radius:10px;padding:8px 10px">
@@ -970,12 +1056,14 @@ function showClients(){
             <span style="white-space:nowrap">${hoursOf(v) ? '⏱ ' + fmtH(hoursOf(v)) : ''}</span></div>`).join('')}
           ${st.n > 3 ? `<div class="muted" style="font-size:13px;margin-top:2px">+ ${st.n - 3} wcześniejszych – stuknij, aby zobaczyć wszystko</div>` : ''}</div>`; })()}
       ${n ? `<div style="font-size:14px">${n.date < ymd(new Date()) ? '⚠️ Zaległa' : '⏳ Następna'}: <b>${shortDate(n.date)}${n.time ? ', ' + n.time : ''}</b>${n.dur ? ' (' + fmtDur(n.dur) + ')' : ''}</div>${quickBtns(c, n)}` : ''}</div>`).join('')
-      || '<p class="muted">Brak klientów.</p>';
+      + (more > 0 ? `<button class="btn sec" id="moreC">Pokaż kolejnych (${more})</button>` : '')
+      || '<p class="muted">Brak klientów.</p>');
+    if ($('moreC')) $('moreC').onclick = () => { cliLimit += 30; draw(); };
     app.querySelectorAll('[data-id]').forEach(e => e.onclick = () => showClient(e.dataset.id));
     bindQuick();
   };
   draw();
-  $('q').oninput = draw;
+  $('q').oninput = () => { cliLimit = 30; draw(); };
   $('so').onchange = e => { cliSort = e.target.value; draw(); };
   $('sig').oninput = e => setSig(e.target.value.trim());
   $('sir').onchange = e => setSiren(e.target.checked);
@@ -996,22 +1084,24 @@ function bindSwipe(onOpen){
   const close = el => { if (el) { el.style.transform = ''; if (openEl === el) openEl = null; } };
   app.querySelectorAll('.sw').forEach(w => {
     const card = w.querySelector('.swc');
+    if (card.dataset.sw) return; card.dataset.sw = '1';
     let x0 = 0, y0 = 0, dx = 0, drag = false, moved = false, startOpen = false;
     card.addEventListener('pointerdown', e => {
       x0 = e.clientX; y0 = e.clientY; dx = 0; drag = true; moved = false; startOpen = openEl === card;
       if (openEl && openEl !== card) close(openEl);
       card.style.transition = 'none';
     });
+    let raf = 0;
     card.addEventListener('pointermove', e => {
       if (!drag) return;
       const mx = e.clientX - x0, my = e.clientY - y0;
       if (!moved && Math.abs(mx) < 8) return;
       if (!moved && Math.abs(my) > Math.abs(mx)) { drag = false; return; }
       moved = true; dx = Math.max(-110, Math.min(0, mx + (startOpen ? -96 : 0)));
-      card.style.transform = `translateX(${dx}px)`;
-    });
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; card.style.transform = `translate3d(${dx}px,0,0)`; });
+    }, {passive: true});
     const end = () => {
-      if (!drag) return; drag = false; card.style.transition = '';
+      if (!drag) return; drag = false; if (raf) { cancelAnimationFrame(raf); raf = 0; } card.style.transition = '';
       if (!moved) return;
       if (dx < -48) { card.style.transform = 'translateX(-96px)'; openEl = card; } else close(card);
     };
@@ -1032,7 +1122,7 @@ function bindSwipe(onOpen){
 function showHistory(){
   view = showHistory; tab('his'); head('Historia prac');
   app.innerHTML = `<input id="q" placeholder="🔍 Szukaj: klient, adres, opis">
-    <p class="muted" style="margin:0 0 4px">Stuknij wpis, aby go poprawić. Przesuń w lewo, żeby usunąć.</p><div id="list"></div>`;
+    <p class="muted" style="margin:0 0 4px">Stuknij wpis, aby go poprawić. Przesuń w lewo, żeby usunąć.</p><div id="list" data-own></div>`;
   const draw = () => {
     const f = $('q').value.toLowerCase(), all = [];
     clients.forEach(c => (c.visits||[]).forEach(v => {
@@ -1040,7 +1130,8 @@ function showHistory(){
     }));
     all.sort((a, b) => b.v.date.localeCompare(a.v.date));
     let html = '', mon = '';
-    all.forEach(({c, v}) => {
+    const more = all.length - histLimit;
+    all.slice(0, histLimit).forEach(({c, v}) => {
       const m = new Date(v.date + 'T12:00').toLocaleDateString('pl-PL', {month: 'long', year: 'numeric'});
       if (m !== mon) { mon = m; html += `<h3 style="margin:16px 0 8px">${m}</h3>`; }
       html += `<div class="sw" data-c="${c.id}" data-v="${v.id}"><button class="swdel">🗑<br>Usuń</button>
@@ -1053,13 +1144,15 @@ function showHistory(){
         <div class="row" style="align-items:flex-end"><div class="photos">${[...(v.before||[]).slice(0,2), ...(v.after||[]).slice(0,2)].map(p => `<img data-pid="${p}" draggable="false">`).join('')}</div>
           <span style="display:flex;gap:6px;margin-left:auto">${cmpBtn(c, v)}<span class="smsb" style="margin:0;background:var(--g2);color:var(--g)">✏️ Edytuj</span></span></div></div></div>`;
     });
-    $('list').innerHTML = html || '<p class="muted">Brak wykonanych prac.</p>';
+    if (more > 0) html += `<button class="btn sec" id="moreH">Pokaż starsze (${more})</button>`;
+    nativeHTML.set.call($('list'), html || '<p class="muted">Brak wykonanych prac.</p>');
+    if ($('moreH')) $('moreH').onclick = () => { histLimit += 30; draw(); };
     loadImgs();
     bindSwipe((cid, vid) => editVisit(cid, vid, showHistory));
     bindCmp();
   };
   draw();
-  $('q').oninput = draw;
+  $('q').oninput = () => { histLimit = 30; draw(); };
 }
 
 // ---------- KARTA KLIENTA ----------
@@ -1174,7 +1267,7 @@ function editVisit(cid, vid, back){
     <label>Opis – co zostało zrobione</label><textarea id="ds" rows="4">${esc(v.desc)}</textarea>
     <label>Kwota za tę wizytę (zł)</label><input id="am" type="text" inputmode="decimal" autocomplete="off" value="${v.amount ?? c.price ?? ''}">
     <label><input type="checkbox" id="pd" style="width:auto" ${v.paid ? 'checked' : ''}> Zapłacone</label><br><br>
-    ${v.paid ? `<label>Data zapłaty</label><input id="pdt" type="date" value="${v.paidAt || v.date}">` : ''}
+    ${v.paid ? `<label>Data zapłaty <span class="muted" style="font-weight:400">(domyślnie dzień wykonania usługi)</span></label><input id="pdt" type="date" value="${v.paidAt || v.date}">` : ''}
     ${v.before.length && v.after.length ? `<button class="btn" style="background:#5e35b1" id="cmpv">🔀 Porównaj przed / po</button><br>` : ''}
     <label>Zdjęcia PRZED</label><div class="photos">${ph('before')}</div>
     <button class="btn sec" id="ab">📷 Dodaj zdjęcia przed</button><br>
@@ -1198,7 +1291,7 @@ function editVisit(cid, vid, back){
       if ($('vh')) { v.hours = parseH($('vh').value); v.helpers = keepPaidOut(readHelpers(app, v.hours), v.helpers); }
       if ($('rm')) v.remind = +$('rm').value; v.done = $('dn').checked; if (v.done) v.cancelled = false; v.desc = $('ds').value;
       v.amount = parseH($('am').value); v.paid = $('pd').checked;
-      v.paidAt = v.paid ? (($('pdt') && $('pdt').value) || v.paidAt || ymd(new Date())) : null; };
+      v.paidAt = v.paid ? (($('pdt') && $('pdt').value) || v.paidAt || v.date) : null; };
     const add = k => { keep(); const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.multiple = true;
       i.onchange = async () => { for (const f of i.files) { const id = newId(); await putPhoto(id, await shrink(f)); v[k].push(id); added.push(id); } draw(); };
       i.click(); };
