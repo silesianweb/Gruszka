@@ -179,7 +179,7 @@ Object.defineProperty(app, 'innerHTML', {
     setHTML(this, html, true);
   }
 });
-const APP_VER = '29.10.2026 · 21:25';
+const APP_VER = '29.10.2026 · 21:30';
 
 // ---------- LOGO: drzewo gruszy ----------
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -857,7 +857,7 @@ function addVisit(date, back){
     const d = $('avd').value; if (!d) return alert('Wybierz datę');
     (c.visits = c.visits || []).push({id: newId(), date: d, time: $('avt').value, dur: null, done: false, cancelled: false,
       desc: $('avs').value.trim(), team: readTeam(app), remind: 1, amount: null, paid: false, before: [], after: []});
-    saveClient(c); selDay = d; back();
+    playSiren(); saveClient(c); selDay = d; back();
   };
 }
 
@@ -1048,7 +1048,7 @@ function showClients(){
     <div class="card" style="margin-top:20px"><label>💬 Podpis w SMS do klientów</label>
       <input id="sig" placeholder="np. Pozdrawiam, Marek – usługi ogrodnicze" value="${esc(getSig())}">
       <p class="muted" style="margin:0;font-size:13px">Dopisuje się na końcu przypomnienia wysyłanego przyciskiem 💬 SMS.</p>
-      <label style="display:block;margin-top:12px"><input type="checkbox" id="sir" style="width:auto" ${sirenOn() ? 'checked' : ''}> 🚒 Syrena po odhaczeniu wizyty</label>
+      <label style="display:block;margin-top:12px"><input type="checkbox" id="sir" style="width:auto" ${sirenOn() ? 'checked' : ''}> 🚒 Syrena po dodaniu i odhaczeniu wizyty</label>
       <a href="#" id="sirT" style="font-size:14px">▶ Posłuchaj</a></div>
     <p class="muted" style="text-align:center">Zalogowano: ${esc(user.email)}<br><span style="font-size:12px">Wersja aplikacji: ${APP_VER}</span></p>
     <button class="btn sec" id="out">Wyloguj</button>`;
@@ -1349,6 +1349,7 @@ function editVisit(cid, vid, back){
     $('s').onclick = () => { keep(); if (!v.date) return alert('Wybierz datę');
       const i = c.visits.findIndex(x => x.id === v.id); if (i >= 0) c.visits[i] = v; else c.visits.push(v);
       if (!wasDone && v.done) addNext(c, v, plan0);
+      if (isNew || (!wasDone && v.done)) playSiren();
       removed.forEach(delPhoto); saveClient(c); back(); };
     const saveNow = () => { keep(); const i = c.visits.findIndex(x => x.id === v.id); if (i >= 0) c.visits[i] = v;
       removed.forEach(delPhoto); removed.length = 0; added.length = 0; saveClient(c); };
