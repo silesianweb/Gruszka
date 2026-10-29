@@ -195,7 +195,7 @@ Object.defineProperty(app, 'innerHTML', {
     setHTML(this, html, true);
   }
 });
-const APP_VER = '29.10.2026 · 23:45';
+const APP_VER = '29.10.2026 · 23:50';
 
 // ---------- LOGO: drzewo gruszy ----------
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -897,7 +897,9 @@ function bindPay(){
     markPaid(b.dataset.c, b.dataset.vid, b.dataset.pay === '1');
   });
 }
-let payMonth = new Date(), payMode = 'month', monthsOpen = false;
+let payMonth = new Date(), payMode = 'month', payOpen = {months: false, cli: false, out: false, hist: false};
+const secBtn = (k, label) => `<button class="btn sec" data-sec="${k}" style="display:flex;justify-content:space-between;align-items:center;text-align:left">
+  <span>${label}</span><span>${payOpen[k] ? '▲' : '▼'}</span></button>`;
 function payRange(){
   const d = payMonth, y = d.getFullYear(), m = d.getMonth();
   if (payMode === 'year') return {from: y + '-01-01', to: y + '-12-31', label: String(y), word: 'w tym roku'};
@@ -963,21 +965,23 @@ function showPay(){
       <div class="stat"><span class="muted">Przepracowane</span><b>${hrs ? fmtH(hrs) : '–'}</b></div>
       <div class="stat"><span class="muted">Odwołane</span><b>${cancelled.length}</b></div></div>
     ${noAmount ? `<p style="color:#c62828;font-size:14px">⚠️ ${noAmount} ${pl(noAmount, 'płatność nie ma', 'płatności nie mają', 'płatności nie ma')} wpisanej kwoty, więc nie liczą się do sumy. Stuknij ją i wpisz kwotę.</p>` : ''}
-    ${months.length ? `<button class="btn sec" id="mToggle">📊 Zestawienie miesięcy ${monthsOpen ? '▲' : '▼'}</button>` : ''}
-    ${months.length && monthsOpen ? `<div class="card" style="padding:4px 12px;margin-top:8px">${months.map(x => `<div class="row" data-pm-month="${x.i}" style="padding:8px 0;border-bottom:1px solid var(--g2);${x.inc || x.out ? '' : 'opacity:.45'}">
+    ${months.length ? secBtn('months', '📊 Zestawienie miesięcy') : ''}
+    ${months.length && payOpen.months ? `<div class="card" style="padding:4px 12px;margin-top:8px">${months.map(x => `<div class="row" data-pm-month="${x.i}" style="padding:8px 0;border-bottom:1px solid var(--g2);${x.inc || x.out ? '' : 'opacity:.45'}">
       <span style="text-transform:capitalize">${x.name}</span><span style="font-size:14px">${zl(x.inc)}${x.out ? ` <span style="color:#e65100">− ${zl(x.out)}</span>` : ''} → <b style="color:var(--g)">${zl(x.inc - x.out)}</b></span></div>`).join('')}</div>` : ''}
-    ${top.length ? `<h3>Klienci ${R.word}</h3>${top.map(x => `<div class="card row" data-id="${x.c.id}">
-      <span><b>${esc(x.c.name)}</b><br><span class="muted">${x.n} ${pl(x.n, 'płatność', 'płatności', 'płatności')}</span></span><b>${x.s} zł</b></div>`).join('')}` : ''}
-    ${outLog.length ? `<h3>Wypłaty pomocnikom</h3>${outLog.sort((a, b) => (b.h.paidOutAt || '').localeCompare(a.h.paidOutAt || '')).map(x => `<div class="card row">
+    ${top.length ? secBtn('cli', `👥 Klienci ${R.word} (${top.length})`) : ''}
+    ${top.length && payOpen.cli ? `<div style="margin-top:8px">${top.map(x => `<div class="card row" data-id="${x.c.id}">
+      <span><b>${esc(x.c.name)}</b><br><span class="muted">${x.n} ${pl(x.n, 'płatność', 'płatności', 'płatności')}</span></span><b>${x.s} zł</b></div>`).join('')}</div>` : ''}
+    ${outLog.length ? secBtn('out', `💸 Wypłaty pomocnikom (${outLog.length})`) : ''}
+    ${outLog.length && payOpen.out ? `<div style="margin-top:8px">${outLog.sort((a, b) => (b.h.paidOutAt || '').localeCompare(a.h.paidOutAt || '')).map(x => `<div class="card row">
       <span><b>${esc(x.h.name)}</b><br><span class="muted" style="font-size:13px">${shortDate(x.h.paidOutAt || x.v.date)} · za: ${esc(x.c.name)}, ${shortDate(x.v.date)}</span></span>
-      <b style="color:#e65100">− ${zl(x.h.pay)}</b></div>`).join('')}` : ''}
-    <h3>Historia płatności</h3>
-    ${paid.map(({c, v}) => `<div class="card" data-c="${c.id}" data-v="${v.id}" style="${v.amount == null ? 'border-left:5px solid #c62828' : ''}">
+      <b style="color:#e65100">− ${zl(x.h.pay)}</b></div>`).join('')}</div>` : ''}
+    ${secBtn('hist', `🧾 Historia płatności (${paid.length})`)}
+    ${!payOpen.hist ? '' : `<div style="margin-top:8px">${paid.map(({c, v}) => `<div class="card" data-c="${c.id}" data-v="${v.id}" style="${v.amount == null ? 'border-left:5px solid #c62828' : ''}">
       <div class="row"><b>${esc(c.name)}</b><b>${v.amount != null ? v.amount + ' zł' : '<span style="color:#c62828">brak kwoty</span>'}</b></div>
       ${helperPay(v) ? `<div style="font-size:14px;color:#e65100">👷 ${helpersTxt(v)}</div>` : ''}
       <div class="muted" style="font-size:14px">Zapłacono: ${shortDate(v.paidAt || v.date)}${v.paidAt && v.paidAt !== v.date ? ' · praca: ' + shortDate(v.date) : ''}</div>
       ${v.desc ? `<div style="font-size:14px">${esc(v.desc)}</div>` : ''}</div>`).join('')
-      || `<p class="muted">Brak płatności ${R.word}.</p>`}`;
+      || `<p class="muted">Brak płatności ${R.word}.</p>`}</div>`}`;
   app.querySelectorAll('[data-payout]').forEach(b => b.onclick = () => {
     const o = owed[b.dataset.payout]; if (!o) return;
     const today = ymd(new Date()), prevs = [];
@@ -992,7 +996,7 @@ function showPay(){
   const shift = k => { if (payMode === 'year') payMonth = new Date(y + k, m, 1);
     else if (payMode === 'week') { const d = new Date(payMonth); d.setDate(d.getDate() + 7 * k); payMonth = d; }
     else payMonth = new Date(y, m + k, 1); showPay(); };
-  if ($('mToggle')) $('mToggle').onclick = () => { monthsOpen = !monthsOpen; showPay(); };
+  app.querySelectorAll('[data-sec]').forEach(b => b.onclick = () => { payOpen[b.dataset.sec] = !payOpen[b.dataset.sec]; showPay(); });
   $('pm').onclick = () => shift(-1);
   $('nm').onclick = () => shift(1);
   app.querySelectorAll('[data-pmode]').forEach(b => b.onclick = () => { payMode = b.dataset.pmode; if (payMode === 'week') payMonth = new Date(); showPay(); });
