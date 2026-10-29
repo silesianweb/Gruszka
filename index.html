@@ -18,6 +18,13 @@ body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#fff;col
 header{background:#fff;color:var(--g);padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;font-size:21px;font-weight:700;display:flex;align-items:center;gap:10px;border-bottom:2px solid var(--g2)}
 .top{position:sticky;top:0;z-index:5;background:#fff}
 header img{width:36px;height:36px;border-radius:9px}
+#title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header #menuB{margin-left:auto;font-size:24px;width:42px;height:38px;border-radius:10px;background:var(--g2);color:var(--g);padding:0}
+.menuP{position:fixed;z-index:30;right:max(12px,calc((100vw - 600px)/2 + 12px));top:calc(env(safe-area-inset-top) + 58px);background:#fff;border:1px solid var(--g3);border-radius:14px;
+  box-shadow:0 8px 24px #0003;overflow:hidden;min-width:190px;display:flex;flex-direction:column}
+.menuP[hidden]{display:none}
+.menuP button{border:none;background:none;text-align:left;padding:14px 16px;font-size:16px;font-family:inherit;color:#1b3a1d;border-bottom:1px solid var(--g2)}
+.menuP button:last-child{border-bottom:none}.menuP button.red{color:#c62828}.menuP button:active{background:var(--g2)}
 header button{background:none;border:none;color:var(--g);font-size:30px;padding:0 4px;line-height:1}
 main{padding:12px}
 .card{background:#fff;border:1px solid var(--g3);border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:0 2px 6px #2e7d3212}
@@ -94,6 +101,11 @@ nav .ic{font-size:19px;line-height:1.1}
 .tag.red{background:#ffebee;color:#c62828}.tag.orange{background:#fff3e0;color:#e65100}
 .sw{position:relative;margin-bottom:10px;border-radius:14px;overflow:hidden}
 .sw .swc{margin:0;position:relative;transition:transform .2s ease;touch-action:pan-y;will-change:transform;user-select:none;-webkit-user-select:none}
+.sw2{position:relative;margin-bottom:10px;border-radius:14px;overflow:hidden}
+.sw2 .swc{margin:0;position:relative;z-index:1;transition:transform .2s ease;touch-action:pan-y;will-change:transform;user-select:none;-webkit-user-select:none}
+.sw2 .swl,.sw2 .swr{position:absolute;top:0;bottom:0;width:96px;border:none;color:#fff;font-size:15px;font-weight:700;font-family:inherit}
+.sw2 .swl{left:0;background:var(--g)}.sw2 .swr{right:0;background:#c62828}
+.sw2:not(.dr) .swl,.sw2:not(.dr) .swr{visibility:hidden}
 .swdel{position:absolute;right:0;top:0;bottom:0;width:96px;background:#c62828;color:#fff;border:none;font-size:15px;font-weight:700;font-family:inherit}
 .qrow{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:8px}
 .qk{width:48px;height:48px;border-radius:50%;border:2px solid;background:#fff;font-size:24px;font-weight:700;line-height:1;padding:0;font-family:inherit;display:inline-flex;align-items:center;justify-content:center}
@@ -104,7 +116,11 @@ nav .ic{font-size:19px;line-height:1.1}
 </head>
 <body>
 <div class="top">
-<header><button id="back" style="display:none">‹</button><img id="logo" alt=""><span id="title">Gruszka</span></header>
+<header><button id="back" style="display:none">‹</button><img id="logo" alt=""><span id="title">Gruszka</span>
+<button id="menuB" aria-label="Menu" style="display:none">☰</button></header>
+<div id="menuP" class="menuP" hidden>
+  <button data-menu="acc">👤 Konto</button><button data-menu="set">⚙️ Ustawienia</button><button data-menu="out" class="red">🚪 Wyloguj</button>
+</div>
 <nav id="nav" style="display:none"><button id="tCli" class="on"><span class="ic">👥</span>Klienci</button><button id="tCal"><span class="ic">📅</span>Kalendarz</button><button id="tPay"><span class="ic">💰</span>Płatności</button><button id="tHis"><span class="ic">🕘</span>Historia</button><button id="tTeam"><span class="ic">⏱</span>Czas pracy</button><button id="tNew"><span class="ic">📰</span>Aktualności</button></nav>
 </div>
 <main id="app"><p class="muted">Ładowanie...</p></main>
@@ -179,7 +195,7 @@ Object.defineProperty(app, 'innerHTML', {
     setHTML(this, html, true);
   }
 });
-const APP_VER = '29.10.2026 · 23:20';
+const APP_VER = '29.10.2026 · 23:40';
 
 // ---------- LOGO: drzewo gruszy ----------
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -496,6 +512,7 @@ function head(t, back){$('title').textContent=t;backFn=back;$('back').style.disp
 $('back').onclick = () => backFn && backFn();
 function tab(w){[['tNew','new'],['tCal','cal'],['tCli','cli'],['tPay','pay'],['tHis','his'],['tTeam','team']].forEach(([i,k])=>$(i).classList.toggle('on',w===k))}
 $('tNew').onclick = () => showNews();
+document.getElementById('nav').addEventListener('click', () => { menuBack = null; });
 $('tCal').onclick = () => showCal();
 $('tCli').onclick = () => showClients();
 $('tPay').onclick = () => showPay();
@@ -569,7 +586,7 @@ onAuthStateChanged(auth, u => {
   if (unsubS) { unsubS(); unsubS = null; }
   user = u;
   if (!u) { clients = []; showLogin(); return; }
-  $('nav').style.display = 'flex';
+  $('nav').style.display = 'flex'; $('menuB').style.display = '';
   syncPhotos();
   let first = true;
   unsubS = onSnapshot(settingsDoc(), snap => {
@@ -589,7 +606,7 @@ onAuthStateChanged(auth, u => {
 });
 
 function showLogin(){
-  view = null; $('nav').style.display = 'none'; head('Gruszka');
+  view = null; $('nav').style.display = 'none'; $('menuB').style.display = 'none'; $('menuP').hidden = true; head('Gruszka');
   app.innerHTML = `<div class="card">
     <img src="${iconUrl}" style="width:110px;display:block;margin:10px auto;border-radius:24px">
     <h2 style="margin-top:0;text-align:center">Witaj</h2>
@@ -1038,30 +1055,29 @@ function showTeam(){
     <h3>👷 Pomocnicy</h3>
     ${hs.map(h => { const w = workIn(R, h.id), hh = w.reduce((s, x) => s + x.h, 0), earned = w.reduce((s, x) => s + x.pay, 0),
         owed = w.filter(x => !x.paidOut).reduce((s, x) => s + x.pay, 0);
-      return `<div class="card" data-worker="${h.id}" style="cursor:pointer"><div class="row"><b style="font-size:17px">${esc(h.name)}</b>
-        <span style="display:flex;gap:6px;flex:none"><button class="btn sec" style="width:auto;margin:0;padding:6px 10px;font-size:14px" data-ren="${h.id}">✏️</button>
-        <button class="btn del" style="width:auto;margin:0;padding:6px 10px;font-size:14px" data-del="${h.id}">🗑</button></span></div>
+      return `<div class="sw2" data-id="${h.id}"><button class="swl">✏️<br>Edytuj</button><button class="swr">🗑<br>Usuń</button>
+        <div class="card swc" style="cursor:pointer"><div class="row"><b style="font-size:17px">${esc(h.name)}</b><span class="muted" style="font-size:12px">‹ przesuń ›</span></div>
         <div style="display:flex;gap:6px;margin-top:6px">
           <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Czas pracy</span><b style="font-size:17px">${fmtH(hh)}</b></div>
           <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Prace</span><b style="font-size:17px">${w.length}</b></div>
           <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Zarobił(a)</span><b style="font-size:17px;color:#e65100">${zl(earned)}</b></div></div>
         <div class="row" style="margin-top:6px;font-size:13px"><span class="muted">${owed ? `<span style="color:#e65100;font-weight:600">Do wypłaty: ${zl(owed)}</span>` : 'Wszystko wypłacone'}</span>
-          <span class="muted">szczegóły ›</span></div></div>`; }).join('') || '<p class="muted">Nie masz jeszcze pomocników.</p>'}
+          <span class="muted">szczegóły ›</span></div></div></div>`; }).join('') || '<p class="muted">Nie masz jeszcze pomocników.</p>'}
     <div class="card"><label>Dodaj pomocnika</label>
       <div style="display:flex;gap:8px"><input id="hn" placeholder="Imię, np. Kasia" style="margin:0"><button class="btn" style="width:auto;margin:0;padding:0 18px" id="ha">+</button></div></div>
-    <p class="muted" style="font-size:13px">Stuknij osobę, aby zobaczyć jej prace w wybranym okresie. Godziny i kwoty dla pomocników wpisujesz po odhaczeniu wizyty (✓); wypłacasz w Płatnościach przyciskiem „Zapłać”.</p>`;
+    <p class="muted" style="font-size:13px">Stuknij osobę, aby zobaczyć jej prace w wybranym okresie. Pomocnika przesuń w prawo, aby zmienić imię, albo w lewo, aby go usunąć. Godziny i kwoty dla pomocników wpisujesz po odhaczeniu wizyty (✓); wypłacasz w Płatnościach przyciskiem „Zapłać”.</p>`;
   bindPeriod(showTeam);
-  app.querySelectorAll('[data-worker]').forEach(cd => cd.onclick = e => { if (e.target.closest('button')) return; workerLimit = 30; showWorker(cd.dataset.worker); });
+  app.querySelectorAll('[data-worker]').forEach(cd => cd.onclick = () => { workerLimit = 30; showWorker(cd.dataset.worker); });
   $('ha').onclick = () => { const n = $('hn').value.trim(); if (!n) return;
     settings.helpers = [...hs, {id: newId(), name: n}]; saveSettings(); showTeam(); };
-  app.querySelectorAll('[data-ren]').forEach(b => b.onclick = () => {
-    const h = hs.find(x => x.id === b.dataset.ren); const n = prompt('Nowe imię:', h.name); if (!n || !n.trim()) return;
-    h.name = n.trim(); settings.helpers = hs; saveSettings(); showTeam(); });
-  app.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
-    const h = hs.find(x => x.id === b.dataset.del);
-    const prevH = hs.slice();
-    settings.helpers = hs.filter(x => x.id !== h.id); saveSettings(); showTeam();
-    toastUndo(`Usunięto pomocnika: ${esc(h.name)}`, () => { settings.helpers = prevH; saveSettings(); }); });
+  bindSwipe2(app, {
+    onTap: id => { workerLimit = 30; showWorker(id); },
+    onRight: id => { const h = hs.find(x => x.id === id); const n = prompt('Nowe imię:', h.name); if (!n || !n.trim()) return;
+      h.name = n.trim(); settings.helpers = hs; saveSettings(); showTeam(); },
+    onLeft: id => { const h = hs.find(x => x.id === id), prevH = hs.slice();
+      settings.helpers = hs.filter(x => x.id !== id); saveSettings(); showTeam();
+      toastUndo(`Usunięto pomocnika: ${esc(h.name)}`, () => { settings.helpers = prevH; saveSettings(); }); }
+  });
 }
 function showWorker(who){
   const isMe = who === 'me', hlp = (settings.helpers || []).find(x => x.id === who);
@@ -1097,6 +1113,53 @@ function showWorker(who){
   app.querySelectorAll('[data-v]').forEach(e => e.onclick = () => editVisit(e.dataset.c, e.dataset.v, () => showWorker(who)));
 }
 
+// ---------- MENU: konto, ustawienia, wyloguj ----------
+const menuP = $('menuP');
+$('menuB').onclick = e => { e.stopPropagation(); menuP.hidden = !menuP.hidden; };
+document.addEventListener('click', e => { if (!menuP.hidden && !menuP.contains(e.target)) menuP.hidden = true; });
+menuP.querySelectorAll('[data-menu]').forEach(b => b.onclick = () => {
+  menuP.hidden = true;
+  if (b.dataset.menu === 'acc') showAccount();
+  if (b.dataset.menu === 'set') showSettings();
+  if (b.dataset.menu === 'out' && confirm('Wylogować się z Gruszki?')) signOut(auth);
+});
+let menuBack = null;
+function menuView(title, html){
+  const back = menuBack || (() => showClients());
+  view = null; tab(''); head(title, back);
+  app.innerHTML = html;
+}
+function showAccount(){
+  if (!/Konto|Ustawienia/.test($('title').textContent)) menuBack = view;
+  menuView('Konto', `<div class="card"><div class="muted">Zalogowano jako</div><b style="font-size:17px;word-break:break-all">${esc(user.email)}</b></div>
+    <div class="card"><b>🔑 Zmiana hasła</b><p class="muted" style="margin:4px 0 0;font-size:14px">Wyślemy na Twój e-mail link do ustawienia nowego hasła.</p>
+      <button class="btn sec" id="pwr">Wyślij link do zmiany hasła</button><p id="pwm" class="muted" style="margin:6px 0 0"></p></div>
+    <div class="card"><div class="row"><span class="muted">Wersja aplikacji</span><b>${APP_VER}</b></div>
+      <div class="row" style="margin-top:6px"><span class="muted">Klienci</span><b>${clients.length}</b></div></div>
+    <button class="btn del" id="out2">🚪 Wyloguj</button>`);
+  $('pwr').onclick = () => sendPasswordResetEmail(auth, user.email)
+    .then(() => $('pwm').textContent = 'Wysłano – sprawdź skrzynkę (także SPAM).').catch(e => $('pwm').textContent = 'Błąd: ' + e.message);
+  $('out2').onclick = () => { if (confirm('Wylogować się z Gruszki?')) signOut(auth); };
+}
+function showSettings(){
+  if (!/Konto|Ustawienia/.test($('title').textContent)) menuBack = view;
+  menuView('Ustawienia', `<div class="card"><b>💬 Wiadomości SMS do klientów</b>
+      <label style="margin-top:8px;display:block">Podpis na końcu wiadomości</label>
+      <input id="sig" placeholder="np. Pozdrawiam, Marek – usługi ogrodnicze" value="${esc(getSig())}">
+      <p class="muted" style="margin:0;font-size:13px">Dopisuje się do przypomnień i wiadomości o przeniesieniu lub odwołaniu wizyty.</p>
+      <div class="muted" style="font-size:13px;margin-top:10px">Przykład:</div>
+      <div id="sigEx" style="background:var(--g2);border-radius:12px;padding:8px 10px;font-size:14px;margin-top:4px"></div></div>
+    <div class="card"><b>🔊 Dźwięk</b>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:15px;color:inherit"><input type="checkbox" id="sir" style="width:22px;height:22px;margin:0" ${sirenOn() ? 'checked' : ''}> 🚒 Syrena po dodaniu i odhaczeniu wizyty</label>
+      <button class="btn sec" id="sirT">▶ Posłuchaj</button></div>
+    <p class="muted" style="font-size:13px">Te ustawienia zapisują się w tym telefonie.</p>`);
+  const ex = () => $('sigEx').textContent = withSig('Dzień dobry, przypominam o wizycie jutro o godz. 9:00. W razie zmian proszę o kontakt.');
+  ex();
+  $('sig').oninput = e => { setSig(e.target.value.trim()); ex(); };
+  $('sir').onchange = e => setSiren(e.target.checked);
+  $('sirT').onclick = () => { const was = sirenOn(); setSiren(true); playSiren(); setSiren(was); };
+}
+
 // ---------- LISTA KLIENTÓW ----------
 let cardFor = null, cardLimit = 10;
 let cliSort = 'new', cliLimit = 30, histLimit = 30;
@@ -1113,13 +1176,7 @@ function showClients(){
     <select id="so"><option value="az">Sortuj: alfabetycznie</option>
       <option value="old">Sortuj: najdawniej robione</option><option value="new">Sortuj: ostatnio robione</option></select>
     <button class="btn" id="add">+ Nowy klient</button><br><div id="list" data-own></div>
-    <div class="card" style="margin-top:20px"><label>💬 Podpis w SMS do klientów</label>
-      <input id="sig" placeholder="np. Pozdrawiam, Marek – usługi ogrodnicze" value="${esc(getSig())}">
-      <p class="muted" style="margin:0;font-size:13px">Dopisuje się na końcu przypomnienia wysyłanego przyciskiem 💬 SMS.</p>
-      <label style="display:block;margin-top:12px"><input type="checkbox" id="sir" style="width:auto" ${sirenOn() ? 'checked' : ''}> 🚒 Syrena po dodaniu i odhaczeniu wizyty</label>
-      <a href="#" id="sirT" style="font-size:14px">▶ Posłuchaj</a></div>
-    <p class="muted" style="text-align:center">Zalogowano: ${esc(user.email)}<br><span style="font-size:12px">Wersja aplikacji: ${APP_VER}</span></p>
-    <button class="btn sec" id="out">Wyloguj</button>`;
+`;
   $('so').value = cliSort;
   const draw = () => {
     const f = $('q').value.toLowerCase();
@@ -1147,11 +1204,7 @@ function showClients(){
   draw();
   $('q').oninput = () => { cliLimit = 30; draw(); };
   $('so').onchange = e => { cliSort = e.target.value; draw(); };
-  $('sig').oninput = e => setSig(e.target.value.trim());
-  $('sir').onchange = e => setSiren(e.target.checked);
-  $('sirT').onclick = e => { e.preventDefault(); const was = sirenOn(); setSiren(true); playSiren(); setSiren(was); };
   $('add').onclick = () => editClient(null);
-  $('out').onclick = () => { if (confirm('Wylogować?')) signOut(auth); };
 }
 
 // ---------- HISTORIA PRAC ----------
@@ -1160,6 +1213,45 @@ function deleteVisit(cid, vid){
   const v = (c.visits||[]).find(x => x.id === vid); if (!v) return;
   [...(v.before||[]), ...(v.after||[])].forEach(delPhoto);
   c.visits = c.visits.filter(x => x.id !== vid); saveClient(c);
+}
+function bindSwipe2(root, {onTap, onLeft, onRight}){
+  let openEl = null;
+  const close = el => { if (el) { el.style.transform = ''; el.dataset.pos = '0'; if (openEl === el) openEl = null;
+    const w = el.parentElement; setTimeout(() => { if (el.dataset.pos === '0') w.classList.remove('dr'); }, 220); } };
+  root.querySelectorAll('.sw2').forEach(w => {
+    const card = w.querySelector('.swc');
+    if (card.dataset.sw) return; card.dataset.sw = '1';
+    let x0 = 0, y0 = 0, dx = 0, drag = false, moved = false, base = 0, raf = 0;
+    card.addEventListener('pointerdown', e => {
+      x0 = e.clientX; y0 = e.clientY; dx = 0; drag = true; moved = false; base = +card.dataset.pos || 0;
+      if (openEl && openEl !== card) close(openEl);
+      card.style.transition = 'none';
+    });
+    card.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const mx = e.clientX - x0, my = e.clientY - y0;
+      if (!moved && Math.abs(mx) < 8) return;
+      if (!moved && Math.abs(my) > Math.abs(mx)) { drag = false; card.style.transition = ''; return; }
+      if (!moved) w.classList.add('dr');
+      moved = true; dx = Math.max(-110, Math.min(110, base + mx));
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; card.style.transform = `translate3d(${dx}px,0,0)`; });
+    }, {passive: true});
+    const end = () => {
+      if (!drag) return; drag = false; if (raf) { cancelAnimationFrame(raf); raf = 0; } card.style.transition = '';
+      if (!moved) return;
+      if (dx < -48) { card.style.transform = 'translate3d(-96px,0,0)'; card.dataset.pos = '-96'; openEl = card; }
+      else if (dx > 48) { card.style.transform = 'translate3d(96px,0,0)'; card.dataset.pos = '96'; openEl = card; }
+      else close(card);
+    };
+    card.addEventListener('pointerup', end); card.addEventListener('pointercancel', end);
+    card.addEventListener('click', () => {
+      if (moved) { moved = false; return; }
+      if (openEl) { close(openEl); return; }
+      onTap && onTap(w.dataset.id);
+    });
+    w.querySelector('.swl').onclick = () => { close(card); onRight && onRight(w.dataset.id); };
+    w.querySelector('.swr').onclick = () => { close(card); onLeft && onLeft(w.dataset.id); };
+  });
 }
 function bindSwipe(onOpen){
   let openEl = null;
