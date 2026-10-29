@@ -179,7 +179,7 @@ Object.defineProperty(app, 'innerHTML', {
     setHTML(this, html, true);
   }
 });
-const APP_VER = '29.10.2026 · 21:35';
+const APP_VER = '29.10.2026 · 23:20';
 
 // ---------- LOGO: drzewo gruszy ----------
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -984,40 +984,74 @@ function showPay(){
 }
 
 // ---------- POMOCNICY I GODZINY ----------
+let teamMode = 'month', teamDate = new Date(), workerLimit = 30;
+function rangeOf(mode, d){
+  const y = d.getFullYear(), m = d.getMonth();
+  if (mode === 'year') return {from: y + '-01-01', to: y + '-12-31', label: 'Rok ' + y};
+  if (mode === 'week') { const from = addDays(ymd(d), -((d.getDay() + 6) % 7)), to = addDays(from, 6);
+    return {from, to, label: shortDate(from).replace(/ \d{4}$/, '') + ' – ' + shortDate(to)}; }
+  const l = d.toLocaleDateString('pl-PL', {month: 'long', year: 'numeric'});
+  return {from: ymd(new Date(y, m, 1)), to: ymd(new Date(y, m + 1, 0)), label: l.charAt(0).toUpperCase() + l.slice(1)};
+}
+function periodBar(R){
+  const cur = rangeOf(teamMode, new Date()).from === R.from;
+  return `<div class="seg"><button data-tm="week" class="${teamMode === 'week' ? 'on' : ''}">Tydzień</button>
+      <button data-tm="month" class="${teamMode === 'month' ? 'on' : ''}">Miesiąc</button>
+      <button data-tm="year" class="${teamMode === 'year' ? 'on' : ''}">Rok</button></div>
+    <div class="card"><div class="row">
+      <button class="btn sec" style="width:auto;margin:0" id="tp">‹</button>
+      <div style="text-align:center"><b>${R.label}</b>${cur ? '<div class="muted" style="font-size:12px">bieżący</div>'
+        : '<div><a href="#" id="tnow" style="font-size:12px">↺ wróć do bieżącego</a></div>'}</div>
+      <button class="btn sec" style="width:auto;margin:0" id="tn">›</button></div></div>`;
+}
+function bindPeriod(redraw){
+  app.querySelectorAll('[data-tm]').forEach(b => b.onclick = () => { teamMode = b.dataset.tm; workerLimit = 30; redraw(); });
+  const shift = k => { const d = new Date(teamDate);
+    if (teamMode === 'year') d.setFullYear(d.getFullYear() + k); else if (teamMode === 'week') d.setDate(d.getDate() + 7 * k); else { d.setDate(1); d.setMonth(d.getMonth() + k); }
+    teamDate = d; workerLimit = 30; redraw(); };
+  $('tp').onclick = () => shift(-1); $('tn').onclick = () => shift(1);
+  if ($('tnow')) $('tnow').onclick = e => { e.preventDefault(); teamDate = new Date(); workerLimit = 30; redraw(); };
+}
+// zestawienie prac w okresie: dla mnie albo dla pomocnika
+function workIn(R, who){
+  const rows = [];
+  clients.forEach(c => (c.visits || []).forEach(v => {
+    if (!v.done || v.date < R.from || v.date > R.to) return;
+    if (who === 'me') { const out = helperPay(v);
+      rows.push({c, v, h: hoursOf(v), amt: v.paid ? +v.amount || 0 : 0, out, paid: !!v.paid}); }
+    else { const h = (v.helpers || []).find(x => x.id === who); if (!h) return;
+      rows.push({c, v, h: +h.hours || 0, pay: +h.pay || 0, paidOut: !!h.paidOut, paidOutAt: h.paidOutAt}); }
+  }));
+  return rows.sort((a, b) => b.v.date.localeCompare(a.v.date));
+}
 function showTeam(){
   view = showTeam; tab('team'); head('Czas pracy');
-  const now = new Date(), today = ymd(now);
-  const ws = addDays(today, -((now.getDay() + 6) % 7)), we = addDays(ws, 6);
-  const mk = today.slice(0, 7), yk = today.slice(0, 4);
-  const per = [['Tydzień', d => d >= ws && d <= we], ['Miesiąc', d => d.startsWith(mk)], ['Rok', d => d.startsWith(yk)]];
-  const doneV = []; clients.forEach(c => (c.visits||[]).forEach(v => { if (v.done) doneV.push(v); }));
-  const sumP = fn => per.map(([, f]) => doneV.filter(v => f(v.date)).reduce((s, v) => s + fn(v), 0));
-  const mine = sumP(hoursOf);
-  const allV = []; clients.forEach(c => (c.visits||[]).forEach(v => allV.push(v)));
-  const income = sumP(v => v.paid ? +v.amount || 0 : 0);
-  const out = per.map(([, f]) => allV.reduce((s, v) => s + paidOutBy(v, f), 0)), net = income.map((x, i) => x - out[i]);
-  const hOf = id => sumP(v => (v.helpers || []).filter(h => h.id === id).reduce((t, h) => t + (+h.hours || 0), 0));
-  const pOf = id => per.map(([, f]) => allV.reduce((s, v) => s + (v.helpers || []).filter(h => h.id === id && h.paidOut && f(h.paidOutAt || v.date)).reduce((t, h) => t + (+h.pay || 0), 0), 0));
-  const owedOf = id => allV.reduce((s, v) => s + (v.helpers || []).filter(h => h.id === id && !h.paidOut).reduce((t, h) => t + (+h.pay || 0), 0), 0);
-  const stats = (arr, f, col) => `<div style="display:flex;gap:6px;margin-top:6px">${arr.map((h, i) =>
-    `<div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">${per[i][0]}</span><b style="font-size:17px;${col ? 'color:' + col : ''}">${f(h)}</b></div>`).join('')}</div>`;
-  const hs = settings.helpers || [];
-  app.innerHTML = `<div class="card"><b>⏱ Twój czas pracy</b>${stats(mine, fmtH)}
-      <p class="muted" style="margin:6px 0 0;font-size:13px">Tydzień: ${shortDate(ws)} – ${shortDate(we)}. Liczone z pola „Usługa trwała”.</p></div>
-    <div class="card"><b>💰 Twój zarobek</b> <span class="muted" style="font-size:13px">(wpłaty minus wypłacone pomocnikom)</span>${stats(net, zl, 'var(--g)')}
-      <div class="muted" style="font-size:13px;margin-top:6px">${per.map((p, i) => `${p[0]}: wpłynęło ${zl(income[i])}, wypłacono ${zl(out[i])}`).join('<br>')}</div></div>
+  const R = rangeOf(teamMode, teamDate), hs = settings.helpers || [];
+  const me = workIn(R, 'me'), myH = me.reduce((s, x) => s + x.h, 0), inc = me.reduce((s, x) => s + x.amt, 0), out = me.reduce((s, x) => s + x.out, 0);
+  app.innerHTML = periodBar(R) + `
+    <div class="card" data-worker="me" style="cursor:pointer"><div class="row"><b style="font-size:17px">⏱ Ja</b><span class="muted" style="font-size:13px">szczegóły ›</span></div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Czas pracy</span><b style="font-size:17px">${fmtH(myH)}</b></div>
+        <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Prace</span><b style="font-size:17px">${me.length}</b></div>
+        <div class="stat" style="padding:8px;background:var(--g2)"><span class="muted" style="font-size:13px">Mój zarobek</span><b style="font-size:17px;color:var(--g)">${zl(inc - out)}</b></div></div>
+      <div class="muted" style="font-size:12px;margin-top:6px">Wpłynęło ${zl(inc)} − pomocnicy ${zl(out)}</div></div>
     <h3>👷 Pomocnicy</h3>
-    ${hs.map(h => `<div class="card"><div class="row"><b style="font-size:17px">${esc(h.name)}</b>
+    ${hs.map(h => { const w = workIn(R, h.id), hh = w.reduce((s, x) => s + x.h, 0), earned = w.reduce((s, x) => s + x.pay, 0),
+        owed = w.filter(x => !x.paidOut).reduce((s, x) => s + x.pay, 0);
+      return `<div class="card" data-worker="${h.id}" style="cursor:pointer"><div class="row"><b style="font-size:17px">${esc(h.name)}</b>
         <span style="display:flex;gap:6px;flex:none"><button class="btn sec" style="width:auto;margin:0;padding:6px 10px;font-size:14px" data-ren="${h.id}">✏️</button>
         <button class="btn del" style="width:auto;margin:0;padding:6px 10px;font-size:14px" data-del="${h.id}">🗑</button></span></div>
-        <div class="muted" style="font-size:13px;margin-top:6px">Godziny</div>${stats(hOf(h.id), fmtH)}
-        <div class="muted" style="font-size:13px;margin-top:8px">Wypłacono</div>${stats(pOf(h.id), zl, '#e65100')}
-        ${owedOf(h.id) ? `<p style="margin:8px 0 0;color:#e65100;font-weight:600">Do wypłaty: ${zl(owedOf(h.id))} <a href="#" data-gopay>› Płatności</a></p>` : ''}</div>`).join('')
-      || '<p class="muted">Nie masz jeszcze pomocników.</p>'}
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Czas pracy</span><b style="font-size:17px">${fmtH(hh)}</b></div>
+          <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Prace</span><b style="font-size:17px">${w.length}</b></div>
+          <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Zarobił(a)</span><b style="font-size:17px;color:#e65100">${zl(earned)}</b></div></div>
+        <div class="row" style="margin-top:6px;font-size:13px"><span class="muted">${owed ? `<span style="color:#e65100;font-weight:600">Do wypłaty: ${zl(owed)}</span>` : 'Wszystko wypłacone'}</span>
+          <span class="muted">szczegóły ›</span></div></div>`; }).join('') || '<p class="muted">Nie masz jeszcze pomocników.</p>'}
     <div class="card"><label>Dodaj pomocnika</label>
       <div style="display:flex;gap:8px"><input id="hn" placeholder="Imię, np. Kasia" style="margin:0"><button class="btn" style="width:auto;margin:0;padding:0 18px" id="ha">+</button></div></div>
-    <p class="muted" style="font-size:13px">Pomocników zaznaczasz w okienku po odhaczeniu wizyty (✓): wpisujesz ich godziny i ile im się należy. Wypłacasz w Płatnościach przyciskiem „Zapłać” – dopiero wtedy kwota odlicza się od Twojego zarobku.</p>`;
-  app.querySelectorAll('[data-gopay]').forEach(a => a.onclick = e => { e.preventDefault(); showPay(); });
+    <p class="muted" style="font-size:13px">Stuknij osobę, aby zobaczyć jej prace w wybranym okresie. Godziny i kwoty dla pomocników wpisujesz po odhaczeniu wizyty (✓); wypłacasz w Płatnościach przyciskiem „Zapłać”.</p>`;
+  bindPeriod(showTeam);
+  app.querySelectorAll('[data-worker]').forEach(cd => cd.onclick = e => { if (e.target.closest('button')) return; workerLimit = 30; showWorker(cd.dataset.worker); });
   $('ha').onclick = () => { const n = $('hn').value.trim(); if (!n) return;
     settings.helpers = [...hs, {id: newId(), name: n}]; saveSettings(); showTeam(); };
   app.querySelectorAll('[data-ren]').forEach(b => b.onclick = () => {
@@ -1028,6 +1062,39 @@ function showTeam(){
     const prevH = hs.slice();
     settings.helpers = hs.filter(x => x.id !== h.id); saveSettings(); showTeam();
     toastUndo(`Usunięto pomocnika: ${esc(h.name)}`, () => { settings.helpers = prevH; saveSettings(); }); });
+}
+function showWorker(who){
+  const isMe = who === 'me', hlp = (settings.helpers || []).find(x => x.id === who);
+  const name = isMe ? 'Ja' : (hlp ? hlp.name : 'Pomocnik');
+  view = () => showWorker(who); tab('team'); head(name, showTeam);
+  const R = rangeOf(teamMode, teamDate), rows = workIn(R, who), hrs = rows.reduce((s, x) => s + x.h, 0);
+  let sum;
+  if (isMe) { const inc = rows.reduce((s, x) => s + x.amt, 0), out = rows.reduce((s, x) => s + x.out, 0);
+    sum = `<div style="display:flex;gap:6px;margin-bottom:8px">
+      <div class="stat"><span class="muted">Czas pracy</span><b>${fmtH(hrs)}</b></div><div class="stat"><span class="muted">Prace</span><b>${rows.length}</b></div></div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+      <div class="stat"><span class="muted">Wpłynęło</span><b>${zl(inc)}</b></div><div class="stat"><span class="muted">Pomocnicy</span><b style="color:#e65100">− ${zl(out)}</b></div></div>
+      <div class="stat" style="margin-bottom:8px;background:var(--g2)"><span class="muted">💰 Mój zarobek</span><b style="font-size:24px;color:var(--g)">${zl(inc - out)}</b></div>`; }
+  else { const earned = rows.reduce((s, x) => s + x.pay, 0), paid = rows.filter(x => x.paidOut).reduce((s, x) => s + x.pay, 0);
+    sum = `<div style="display:flex;gap:6px;margin-bottom:8px">
+      <div class="stat"><span class="muted">Czas pracy</span><b>${fmtH(hrs)}</b></div><div class="stat"><span class="muted">Prace</span><b>${rows.length}</b></div></div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+      <div class="stat" style="background:#fff3e0"><span class="muted">Zarobił(a)</span><b style="color:#e65100">${zl(earned)}</b></div>
+      <div class="stat"><span class="muted">Wypłacono</span><b>${zl(paid)}</b></div>
+      <div class="stat"><span class="muted">Do wypłaty</span><b style="color:${earned - paid ? '#c62828' : 'inherit'}">${zl(earned - paid)}</b></div></div>`; }
+  const more = rows.length - workerLimit;
+  app.innerHTML = periodBar(R) + sum + `<h3>Prace w tym okresie</h3>` +
+    (rows.slice(0, workerLimit).map(x => `<div class="card" data-c="${x.c.id}" data-v="${x.v.id}">
+      <div class="row"><b>${esc(x.c.name)}</b><span class="muted">${shortDate(x.v.date)}</span></div>
+      ${x.v.desc ? `<div style="font-size:14px">${esc(x.v.desc)}</div>` : ''}
+      <div class="row" style="font-size:14px;margin-top:4px"><span>⏱ ${x.h ? fmtH(x.h) : '–'}</span>
+        ${isMe ? `<span>${x.paid ? zl(x.amt) : '<span class="tag orange">nie zapłacono</span>'}${x.out ? ` <span style="color:#e65100">− ${zl(x.out)}</span>` : ''}</span>`
+          : `<span><b style="color:#e65100">${zl(x.pay)}</b> <span class="tag ${x.paidOut ? '' : 'orange'}">${x.paidOut ? 'wypłacone' : 'do wypłaty'}</span></span>`}</div></div>`).join('')
+      || '<p class="muted">Brak prac w tym okresie.</p>')
+    + (more > 0 ? `<button class="btn sec" id="moreW">Załaduj więcej (${more})</button>` : '');
+  bindPeriod(() => showWorker(who));
+  if ($('moreW')) $('moreW').onclick = () => { workerLimit += 30; showWorker(who); };
+  app.querySelectorAll('[data-v]').forEach(e => e.onclick = () => editVisit(e.dataset.c, e.dataset.v, () => showWorker(who)));
 }
 
 // ---------- LISTA KLIENTÓW ----------
