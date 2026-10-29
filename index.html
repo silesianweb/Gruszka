@@ -35,6 +35,9 @@ nav button.on{background:var(--g);color:#fff;font-weight:700}
 .day{background:#f6faf6}.day.has{background:var(--g3);font-weight:700}.day.today{outline:2px solid var(--g)}.day.sel{background:var(--g);color:#fff}
 .photos{display:flex;flex-wrap:wrap;gap:6px}
 .photos img{width:90px;height:90px;object-fit:cover;border-radius:10px;background:var(--g2)}
+.phgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.photos.sm{gap:4px;min-height:0}.photos.sm img{width:56px;height:56px;border-radius:8px}
+.phbtn{padding:9px 6px;font-size:14px;margin-top:6px}
 .muted{color:#6b8a6e;font-size:14px}
 .row{display:flex;justify-content:space-between;align-items:center}
 a{color:var(--g);font-weight:600}
@@ -48,7 +51,8 @@ nav .ic{font-size:19px;line-height:1.1}
 .chips label{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--g3);border-radius:20px;font-size:15px;color:inherit;background:#fbfdfb}
 .chips input{width:18px;height:18px;margin:0}
 .modal{position:fixed;inset:0;background:#0007;z-index:20;display:flex;align-items:flex-end;justify-content:center;overflow:auto;-webkit-overflow-scrolling:touch}
-.chat{height:300px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;flex-direction:column;gap:8px;padding:4px 2px 8px;border-bottom:1px solid var(--g2);margin-bottom:8px}
+.chat{height:210px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;flex-direction:column;gap:8px;padding:4px 2px 8px;border-bottom:1px solid var(--g2);margin-bottom:8px}
+.chat>*{flex-shrink:0}
 .chat>:first-child{margin-top:auto}
 .bub{align-self:flex-start;max-width:88%;min-width:0;box-sizing:border-box;overflow:hidden;overflow-wrap:break-word;word-wrap:break-word;word-break:break-word;-webkit-hyphens:auto;hyphens:auto;background:var(--g2);border-radius:16px 16px 16px 4px;padding:8px 12px;position:relative}
 .bub.me{align-self:flex-end;background:var(--g);color:#fff;border-radius:16px 16px 4px 16px}
@@ -167,7 +171,7 @@ Object.defineProperty(app, 'innerHTML', {
     setHTML(this, html, true);
   }
 });
-const APP_VER = '28.10.2026 · 11:45';
+const APP_VER = '29.10.2026 · 21:10';
 
 // ---------- LOGO: drzewo gruszy ----------
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -212,9 +216,7 @@ const endTime = (t, m) => { if (!t || !m || m >= 480) return ''; const [h, mm] =
   return String(Math.floor(x / 60) % 24).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); };
 const whenTxt = v => [v.time ? '🕘 ' + v.time + (endTime(v.time, v.dur) ? '–' + endTime(v.time, v.dur) : '') : '',
   v.dur ? '⏱ ' + fmtDur(v.dur) : ''].filter(Boolean).join('  ');
-const timeFields = (pre, v) => `<div style="display:flex;gap:8px">
-  <div style="flex:1"><label>Godzina</label><input id="${pre}t" type="time" value="${v.time || ''}"></div>
-  <div style="flex:1"><label>Przewidywany czas</label>${durSel(pre + 'u', v.dur)}</div></div>`;
+const timeFields = (pre, v) => `<label>Godzina</label><input id="${pre}t" type="time" value="${v.time || ''}">`;
 const byTime = (a, b) => (a.v.time || '99').localeCompare(b.v.time || '99');
 // ---------- szybkie odhaczanie / anulowanie ----------
 function setVisit(cid, vid, act){
@@ -319,7 +321,7 @@ function moveDialog(cid, vid, after = afterDefault){
     const old = {d: v.date, t: v.time};
     v.movedFrom = v.date; v.moveReason = q('mvr').value.trim();
     logAdd(c, `Przeniesiono wizytę z ${shortDate(v.date)} na ${shortDate(nd)}${v.moveReason ? '. Powód: ' + v.moveReason : ''}`, 'move');
-    v.date = nd; v.time = q('mvt').value; v.dur = +q('mvu').value || null;
+    v.date = nd; v.time = q('mvt').value;
     saveClient(c); w.remove(); selDay = nd;
     const sms = q('mvs') && q('mvs').checked;
     after();
@@ -833,16 +835,14 @@ function addVisit(date, back){
     ${timeFields('av', {})}
     <label>Usługa – co jest do zrobienia</label><textarea id="avs" rows="3" placeholder="np. przycięcie żywopłotu, koszenie"></textarea>
     ${teamHtml([])}
-    <label>Przypomnij</label><select id="avr"><option value="-1">Nie przypominaj</option><option value="0">W dniu wizyty</option>
-      <option value="1" selected>1 dzień wcześniej</option><option value="2">2 dni wcześniej</option><option value="7">Tydzień wcześniej</option></select>
     <button class="btn" id="s">Zapisz wizytę</button>
     <button class="btn sec" id="nc">+ To nowy klient – dodaj go</button></div>`;
   $('nc').onclick = () => editClient(null);
   $('s').onclick = () => {
     const c = findClient($('cl').value); if (!c) return alert('Wybierz klienta');
     const d = $('avd').value; if (!d) return alert('Wybierz datę');
-    (c.visits = c.visits || []).push({id: newId(), date: d, time: $('avt').value, dur: +$('avu').value || null, done: false, cancelled: false,
-      desc: $('avs').value.trim(), team: readTeam(app), remind: +$('avr').value, amount: null, paid: false, before: [], after: []});
+    (c.visits = c.visits || []).push({id: newId(), date: d, time: $('avt').value, dur: null, done: false, cancelled: false,
+      desc: $('avs').value.trim(), team: readTeam(app), remind: 1, amount: null, paid: false, before: [], after: []});
     saveClient(c); selDay = d; back();
   };
 }
@@ -1017,7 +1017,7 @@ function showTeam(){
 }
 
 // ---------- LISTA KLIENTÓW ----------
-let cliSort = 'az', cliLimit = 30, histLimit = 30;
+let cliSort = 'new', cliLimit = 30, histLimit = 30;
 const shortDate = s => new Date(s+'T12:00').toLocaleDateString('pl-PL',{day:'numeric',month:'short',year:'numeric'});
 const cStats = c => { const d = (c.visits||[]).filter(v => v.done);
   return {n: d.length, h: d.reduce((s, v) => s + hoursOf(v), 0), z: d.filter(v => v.paid).reduce((s, v) => s + (+v.amount || 0), 0),
@@ -1193,7 +1193,8 @@ function showClient(id){
   const ch = $('chat'); ch.scrollTop = ch.scrollHeight;
   $('msg').oninput = e => { chatDraft[id] = e.target.value; e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; };
   $('send').onclick = () => { const t = $('msg').value.trim(); if (!t) return;
-    chatDraft[id] = ''; const cc = findClient(id); logAdd(cc, t, 'note'); saveClient(cc); showClient(id); };
+    chatDraft[id] = ''; const cc = findClient(id); logAdd(cc, t, 'note'); saveClient(cc); showClient(id);
+    if ($('msg')) { $('msg').value = ''; $('msg').style.height = ''; $('msg').focus(); } };
   app.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => {
     const bub = app.querySelector(`[data-mid="${b.dataset.ed}"]`), m = (c.log || []).find(x => x.id === b.dataset.ed); if (!bub || !m) return;
     bub.innerHTML = `<textarea rows="3">${esc(m.text)}</textarea>
@@ -1226,20 +1227,51 @@ function editClient(id){
   if (!c.city) c.city = 'Studzionka';
   head(isNew ? 'Nowy klient' : 'Edycja klienta', () => isNew ? showClients() : showClient(id));
   app.innerHTML = `<div class="card">
-    <label>Imię i nazwisko</label><input id="n" value="${esc(c.name)}">
-    <label>Telefon</label><input id="p" type="tel" value="${esc(c.phone)}">
+    <label>Imię i nazwisko</label><input id="n" value="${esc(c.name)}" autocomplete="off">
+    <div id="dup"></div>
     <div style="display:flex;gap:8px">
       <div style="flex:3"><label>Ulica i numer domu</label><input id="a" value="${esc(c.street)}" placeholder="np. Lipowa 5"></div>
       <div style="flex:2"><label>Miejscowość</label><input id="ct" value="${esc(c.city)}"></div></div>
-    <label>Notatki (np. rodzaj żywopłotu, kod do bramy)</label><textarea id="no" rows="3">${esc(c.notes)}</textarea>
+    <label>Notatki (np. rodzaj żywopłotu, kod do bramy)</label><textarea id="no" rows="2">${esc(c.notes)}</textarea>
+    <label>Telefon</label><input id="p" type="tel" value="${esc(c.phone)}">
     <button class="btn" id="s">Zapisz</button>${isNew ? '' : '<button class="btn del" id="d">Usuń klienta</button>'}</div>`;
+  const dupes = () => findDupes(c.id, $('n').value, $('a').value, $('ct').value, $('p').value);
+  const showDup = () => {
+    const d = dupes();
+    $('dup').innerHTML = d.length ? `<div style="background:#fff3e0;border:1px solid #ffb74d;border-radius:10px;padding:8px 10px;margin:-4px 0 10px;font-size:14px">
+      ⚠️ <b>Taki klient już istnieje:</b>${d.map(x => `<div class="row" style="margin-top:6px;gap:8px"><span><b>${esc(x.o.name)}</b>${x.o.address ? ' – ' + esc(x.o.address) : ''}<br>
+        <span class="muted" style="font-size:12px">${x.why.join(', ')}</span></span>
+        <button class="btn sec" style="width:auto;margin:0;padding:6px 10px;font-size:13px" data-open="${x.o.id}">Otwórz</button></div>`).join('')}</div>` : '';
+    $('dup').querySelectorAll('[data-open]').forEach(b => b.onclick = () => showClient(b.dataset.open));
+  };
+  ['n', 'a', 'ct', 'p'].forEach(k => $(k).addEventListener('input', showDup));
+  if (!isNew) showDup();
   $('s').onclick = () => {
     c.name = $('n').value.trim(); if (!c.name) return alert('Podaj imię i nazwisko');
+    const d = dupes();
+    if (d.length && !confirm(`Taki klient już istnieje:\n\n${d.map(x => '• ' + x.o.name + (x.o.address ? ' – ' + x.o.address : '') + ' (' + x.why.join(', ') + ')').join('\n')}\n\nCzy na pewno ${isNew ? 'dodać nowego klienta' : 'zapisać'}?`)) return;
     c.phone = $('p').value.trim(); c.street = $('a').value.trim(); c.city = $('ct').value.trim();
     c.address = [c.street, c.city].filter(Boolean).join(', '); c.notes = $('no').value.trim(); c.every = '';
     saveClient(c); showClient(c.id);
   };
   if (!isNew) $('d').onclick = () => { if (confirm('Usunąć klienta, wszystkie wizyty i zdjęcia?')) { removeClient(c); showClients(); } };
+}
+
+// ---------- wykrywanie duplikatów klientów ----------
+const normTxt = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, ' ').trim();
+const normPhone = t => String(t || '').replace(/\D/g, '').replace(/^48(?=\d{9}$)/, '');
+function findDupes(selfId, name, street, city, phone){
+  const n = normTxt(name), st = normTxt(street), ct = normTxt(city), ph = normPhone(phone);
+  const nWords = n.split(' ').filter(w => w.length > 1);
+  return clients.filter(o => o.id !== selfId).map(o => {
+    const why = [], on = normTxt(o.name);
+    const oa = (o.street != null ? o.street : (o.address || '').split(',')[0]) || '', oc = (o.city != null ? o.city : (o.address || '').split(',').slice(1).join(',')) || '';
+    if (n && on === n) why.push('to samo imię i nazwisko');
+    else if (nWords.length >= 2 && nWords.every(w => on.split(' ').includes(w))) why.push('podobne imię i nazwisko');
+    if (ph.length >= 9 && normPhone(o.phone) === ph) why.push('ten sam telefon');
+    if (st && normTxt(oa) === st && (!ct || !normTxt(oc) || normTxt(oc) === ct)) why.push('ten sam adres');
+    return why.length ? {o, why} : null;
+  }).filter(Boolean);
 }
 
 // ---------- FORMULARZ WIZYTY ----------
@@ -1260,21 +1292,16 @@ function editVisit(cid, vid, back){
     <label>Data</label><input id="dt" type="date" value="${v.date}">
     ${v.done ? `<label>⏱ Usługa trwała (godz.)</label><input id="vh" type="text" inputmode="decimal" autocomplete="off" placeholder="np. 2,5" value="${v.hours ?? (v.dur ? v.dur / 60 : '')}">
       ${helpersHtml(v)}` : timeFields('dt', v) + teamHtml(v.team)}
-    ${v.done ? '' : `<label>Przypomnij</label><select id="rm">
-      ${[[-1,'Nie przypominaj'],[0,'W dniu wizyty'],[1,'1 dzień wcześniej'],[2,'2 dni wcześniej'],[7,'Tydzień wcześniej']]
-        .map(([n, t]) => `<option value="${n}" ${(v.remind ?? 1) == n ? 'selected' : ''}>${t}</option>`).join('')}</select>`}
     <label><input type="checkbox" id="dn" style="width:auto" ${v.done ? 'checked' : ''}> Wykonane</label><br><br>
     <label>Opis – co zostało zrobione</label><textarea id="ds" rows="4">${esc(v.desc)}</textarea>
     <label>Kwota za tę wizytę (zł)</label><input id="am" type="text" inputmode="decimal" autocomplete="off" value="${v.amount ?? c.price ?? ''}">
     <label><input type="checkbox" id="pd" style="width:auto" ${v.paid ? 'checked' : ''}> Zapłacone</label><br><br>
     ${v.paid ? `<label>Data zapłaty <span class="muted" style="font-weight:400">(domyślnie dzień wykonania usługi)</span></label><input id="pdt" type="date" value="${v.paidAt || v.date}">` : ''}
     ${v.before.length && v.after.length ? `<button class="btn" style="background:#5e35b1" id="cmpv">🔀 Porównaj przed / po</button><br>` : ''}
-    <label>Zdjęcia PRZED</label><div class="photos">${ph('before')}</div>
-    <button class="btn sec" id="ab">📷 Dodaj zdjęcia przed</button><br>
-    <label>Zdjęcia PO</label><div class="photos">${ph('after')}</div>
-    <button class="btn sec" id="aa">📷 Dodaj zdjęcia po</button><br>
-    <label>Następna wizyta (opcjonalnie)</label><input id="nx" type="date">
-    ${timeFields('nx', {})}
+    <div class="phgrid">
+      <div><label>Zdjęcia PRZED</label><div class="photos sm">${ph('before')}</div><button class="btn sec phbtn" id="ab">📷 Dodaj</button></div>
+      <div><label>Zdjęcia PO</label><div class="photos sm">${ph('after')}</div><button class="btn sec phbtn" id="aa">📷 Dodaj</button></div>
+    </div>
     ${v.cancelled ? `<p style="color:#c62828;font-weight:600">🚫 Ta wizyta jest odwołana.${v.cancelReason ? ' Powód: ' + esc(v.cancelReason) : ''}</p>` : ''}
     ${v.movedFrom && !v.done && !v.cancelled ? `<p class="muted">↪ Przeniesiona z ${shortDate(v.movedFrom)}${v.moveReason ? '. Powód: ' + esc(v.moveReason) : ''}</p>` : ''}
     <button class="btn" id="s">Zapisz</button>
@@ -1287,7 +1314,7 @@ function editVisit(cid, vid, back){
     $('dn').onchange = () => { keep(); draw(); };
     $('pd').onchange = () => { keep(); draw(); };
     const keep = () => { v.date = $('dt').value;
-      if ($('dtt')) { v.time = $('dtt').value; v.dur = +$('dtu').value || null; v.team = readTeam(app); }
+      if ($('dtt')) { v.time = $('dtt').value; v.team = readTeam(app); }
       if ($('vh')) { v.hours = parseH($('vh').value); v.helpers = keepPaidOut(readHelpers(app, v.hours), v.helpers); }
       if ($('rm')) v.remind = +$('rm').value; v.done = $('dn').checked; if (v.done) v.cancelled = false; v.desc = $('ds').value;
       v.amount = parseH($('am').value); v.paid = $('pd').checked;
@@ -1306,10 +1333,7 @@ function editVisit(cid, vid, back){
       w.children[2].onclick = () => w.remove(); document.body.appendChild(w); });
     $('s').onclick = () => { keep(); if (!v.date) return alert('Wybierz datę');
       const i = c.visits.findIndex(x => x.id === v.id); if (i >= 0) c.visits[i] = v; else c.visits.push(v);
-      const nx = $('nx').value;
-      if (!wasDone && v.done && !nx) addNext(c, v, plan0);
-      if (nx) c.visits.push({id: newId(), date: nx, time: $('nxt').value, dur: +$('nxu').value || null, done: false, desc: '',
-        remind: 1, amount: null, paid: false, before: [], after: []});
+      if (!wasDone && v.done) addNext(c, v, plan0);
       removed.forEach(delPhoto); saveClient(c); back(); };
     const saveNow = () => { keep(); const i = c.visits.findIndex(x => x.id === v.id); if (i >= 0) c.visits[i] = v;
       removed.forEach(delPhoto); removed.length = 0; added.length = 0; saveClient(c); };
