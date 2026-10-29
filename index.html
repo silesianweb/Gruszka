@@ -195,7 +195,7 @@ Object.defineProperty(app, 'innerHTML', {
     setHTML(this, html, true);
   }
 });
-const APP_VER = '29.10.2026 · 23:50';
+const APP_VER = '30.10.2026 · 00:00';
 
 // ---------- LOGO: drzewo gruszy ----------
 const ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -1007,7 +1007,7 @@ function showPay(){
 }
 
 // ---------- POMOCNICY I GODZINY ----------
-let teamMode = 'month', teamDate = new Date(), workerLimit = 30;
+let teamMode = 'month', teamDate = new Date(), workerLimit = 30, teamOpen = new Set();
 function rangeOf(mode, d){
   const y = d.getFullYear(), m = d.getMonth();
   if (mode === 'year') return {from: y + '-01-01', to: y + '-12-31', label: 'Rok ' + y};
@@ -1061,23 +1061,26 @@ function showTeam(){
     <h3>👷 Pomocnicy</h3>
     ${hs.map(h => { const w = workIn(R, h.id), hh = w.reduce((s, x) => s + x.h, 0), earned = w.reduce((s, x) => s + x.pay, 0),
         owed = w.filter(x => !x.paidOut).reduce((s, x) => s + x.pay, 0);
+      const op = teamOpen.has(h.id);
       return `<div class="sw2" data-id="${h.id}"><button class="swl">✏️<br>Edytuj</button><button class="swr">🗑<br>Usuń</button>
-        <div class="card swc" style="cursor:pointer"><div class="row"><b style="font-size:17px">${esc(h.name)}</b><span class="muted" style="font-size:12px">‹ przesuń ›</span></div>
-        <div style="display:flex;gap:6px;margin-top:6px">
+        <div class="card swc" style="cursor:pointer"><div class="row"><b style="font-size:17px">${esc(h.name)}</b>
+          <span style="font-size:14px">${fmtH(hh)} · <b style="color:#e65100">${zl(earned)}</b>${owed ? ' <span class="tag orange">do wypłaty</span>' : ''} <span class="muted">${op ? '▲' : '▼'}</span></span></div>
+        ${!op ? '' : `<div style="display:flex;gap:6px;margin-top:6px">
           <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Czas pracy</span><b style="font-size:17px">${fmtH(hh)}</b></div>
           <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Prace</span><b style="font-size:17px">${w.length}</b></div>
           <div class="stat" style="padding:8px"><span class="muted" style="font-size:13px">Zarobił(a)</span><b style="font-size:17px;color:#e65100">${zl(earned)}</b></div></div>
         <div class="row" style="margin-top:6px;font-size:13px"><span class="muted">${owed ? `<span style="color:#e65100;font-weight:600">Do wypłaty: ${zl(owed)}</span>` : 'Wszystko wypłacone'}</span>
-          <span class="muted">szczegóły ›</span></div></div></div>`; }).join('') || '<p class="muted">Nie masz jeszcze pomocników.</p>'}
+          <button class="btn sec" style="width:auto;margin:0;padding:6px 12px;font-size:13px" data-det="${h.id}">Szczegóły ›</button></div>`}</div></div>`; }).join('') || '<p class="muted">Nie masz jeszcze pomocników.</p>'}
     <div class="card"><label>Dodaj pomocnika</label>
       <div style="display:flex;gap:8px"><input id="hn" placeholder="Imię, np. Kasia" style="margin:0"><button class="btn" style="width:auto;margin:0;padding:0 18px" id="ha">+</button></div></div>
-    <p class="muted" style="font-size:13px">Stuknij osobę, aby zobaczyć jej prace w wybranym okresie. Pomocnika przesuń w prawo, aby zmienić imię, albo w lewo, aby go usunąć. Godziny i kwoty dla pomocników wpisujesz po odhaczeniu wizyty (✓); wypłacasz w Płatnościach przyciskiem „Zapłać”.</p>`;
+    <p class="muted" style="font-size:13px">Stuknij pomocnika, aby rozwinąć jego podsumowanie; „Szczegóły” pokazują listę prac. Przesuń w prawo, aby zmienić imię, albo w lewo, aby usunąć. Godziny i kwoty dla pomocników wpisujesz po odhaczeniu wizyty (✓); wypłacasz w Płatnościach przyciskiem „Zapłać”.</p>`;
   bindPeriod(showTeam);
   app.querySelectorAll('[data-worker]').forEach(cd => cd.onclick = () => { workerLimit = 30; showWorker(cd.dataset.worker); });
+  app.querySelectorAll('[data-det]').forEach(b => b.onclick = e => { e.stopPropagation(); workerLimit = 30; showWorker(b.dataset.det); });
   $('ha').onclick = () => { const n = $('hn').value.trim(); if (!n) return;
     settings.helpers = [...hs, {id: newId(), name: n}]; saveSettings(); showTeam(); };
   bindSwipe2(app, {
-    onTap: id => { workerLimit = 30; showWorker(id); },
+    onTap: id => { if (teamOpen.has(id)) teamOpen.delete(id); else teamOpen.add(id); showTeam(); },
     onRight: id => { const h = hs.find(x => x.id === id); const n = prompt('Nowe imię:', h.name); if (!n || !n.trim()) return;
       h.name = n.trim(); settings.helpers = hs; saveSettings(); showTeam(); },
     onLeft: id => { const h = hs.find(x => x.id === id), prevH = hs.slice();
@@ -1168,7 +1171,7 @@ function showSettings(){
 
 // ---------- LISTA KLIENTÓW ----------
 let cardFor = null, cardLimit = 10;
-let cliSort = 'new', cliLimit = 30, histLimit = 30;
+let cliSort = 'new', cliLimit = 30, histLimit = 30, histOpen = null;
 const shortDate = s => new Date(s+'T12:00').toLocaleDateString('pl-PL',{day:'numeric',month:'short',year:'numeric'});
 const cStats = c => { const d = (c.visits||[]).filter(v => v.done);
   return {n: d.length, h: d.reduce((s, v) => s + hoursOf(v), 0), z: d.filter(v => v.paid).reduce((s, v) => s + (+v.amount || 0), 0),
@@ -1302,19 +1305,30 @@ function bindSwipe(onOpen){
 function showHistory(){
   view = showHistory; tab('his'); head('Historia prac');
   app.innerHTML = `<input id="q" placeholder="🔍 Szukaj: klient, adres, opis">
-    <p class="muted" style="margin:0 0 4px">Stuknij wpis, aby go poprawić. Przesuń w lewo, żeby usunąć.</p><div id="list" data-own></div>`;
+    <p class="muted" style="margin:0 0 4px">Stuknij miesiąc, aby go rozwinąć. Wpis stuknij, aby go poprawić, albo przesuń w lewo, żeby usunąć.</p><div id="list" data-own></div>`;
   const draw = () => {
     const f = $('q').value.toLowerCase(), all = [];
     clients.forEach(c => (c.visits||[]).forEach(v => {
       if (v.done && (c.name + ' ' + c.address + ' ' + (v.desc||'')).toLowerCase().includes(f)) all.push({c, v});
     }));
     all.sort((a, b) => b.v.date.localeCompare(a.v.date));
-    let html = '', mon = '';
-    const more = all.length - histLimit;
-    all.slice(0, histLimit).forEach(({c, v}) => {
-      const m = new Date(v.date + 'T12:00').toLocaleDateString('pl-PL', {month: 'long', year: 'numeric'});
-      if (m !== mon) { mon = m; html += `<h3 style="margin:16px 0 8px">${m}</h3>`; }
-      html += `<div class="sw" data-c="${c.id}" data-v="${v.id}"><button class="swdel">🗑<br>Usuń</button>
+    const groups = [];
+    all.forEach(x => { const k = x.v.date.slice(0, 7), g = groups[groups.length - 1];
+      if (g && g.k === k) g.items.push(x); else groups.push({k, items: [x]}); });
+    if (!histOpen) histOpen = new Set(groups.length ? [groups[0].k] : []);
+    const searching = !!f;
+    let html = '';
+    groups.forEach(g => {
+      const open = searching || histOpen.has(g.k);
+      const name = new Date(g.k + '-15T12:00').toLocaleDateString('pl-PL', {month: 'long', year: 'numeric'}).replace(/^./, m => m.toUpperCase());
+      const sum = g.items.reduce((s, x) => s + (x.v.paid ? +x.v.amount || 0 : 0), 0), hrs = g.items.reduce((s, x) => s + hoursOf(x.v), 0);
+      html += `<button class="btn sec" data-hm="${g.k}" style="display:flex;justify-content:space-between;align-items:center;text-align:left;margin-top:10px">
+        <span>${name} <span class="muted" style="font-weight:400;font-size:13px">· ${g.items.length} ${pl(g.items.length, 'praca', 'prace', 'prac')}${hrs ? ' · ' + fmtH(hrs) : ''}${sum ? ' · ' + zl(sum) : ''}</span></span>
+        <span>${open ? '▲' : '▼'}</span></button>`;
+      if (!open) return;
+      html += '<div style="margin-top:8px">';
+      g.items.forEach(({c, v}) => {
+        html += `<div class="sw" data-c="${c.id}" data-v="${v.id}"><button class="swdel">🗑<br>Usuń</button>
         <div class="card swc">
         <div class="row"><b>${esc(c.name)}</b><span class="muted">${shortDate(v.date)}</span></div>
         <div class="muted">${esc(c.address)}</div>${v.desc ? `<div>${esc(v.desc)}</div>` : ''}
@@ -1323,16 +1337,18 @@ function showHistory(){
         ${(v.helpers || []).length ? `<div style="font-size:14px">👷 ${helpersTxt(v)}</div>` : ''}
         <div class="row" style="align-items:flex-end"><div class="photos">${[...(v.before||[]).slice(0,2), ...(v.after||[]).slice(0,2)].map(p => `<img data-pid="${p}" draggable="false">`).join('')}</div>
           <span style="display:flex;gap:6px;margin-left:auto">${cmpBtn(c, v)}<span class="smsb" style="margin:0;background:var(--g2);color:var(--g)">✏️ Edytuj</span></span></div></div></div>`;
+      });
+      html += '</div>';
     });
-    if (more > 0) html += `<button class="btn sec" id="moreH">Pokaż starsze (${more})</button>`;
     nativeHTML.set.call($('list'), html || '<p class="muted">Brak wykonanych prac.</p>');
-    if ($('moreH')) $('moreH').onclick = () => { histLimit += 30; draw(); };
+    $('list').querySelectorAll('[data-hm]').forEach(b => b.onclick = () => { const k = b.dataset.hm;
+      if (histOpen.has(k)) histOpen.delete(k); else histOpen.add(k); draw(); });
     loadImgs();
     bindSwipe((cid, vid) => editVisit(cid, vid, showHistory));
     bindCmp();
   };
   draw();
-  $('q').oninput = () => { histLimit = 30; draw(); };
+  $('q').oninput = draw;
 }
 
 // ---------- KARTA KLIENTA ----------
